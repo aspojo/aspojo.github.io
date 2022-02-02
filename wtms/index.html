@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>aspojo</title>
+    <style>iframe {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+    }</style>
+    <script src="https://cdn.bootcdn.net/ajax/libs/Base64/1.1.0/base64.min.js"></script>
+    <script>
+        function ajaGet(callback) {
+            const httpRequest = new XMLHttpRequest();//第一步：建立所需的对象
+            httpRequest.open('GET', "https://api.github.com/repos/aspojo/aspojo.github.io/contents/public.url", true);//第二步：打开连接  将请求参数写在url中  ps:"./Ptest.php?name=test&nameone=testone"
+            httpRequest.send();//第三步：发送请求  将请求参数写在URL中
+            httpRequest.onreadystatechange = function () {
+                if (httpRequest.readyState == 4 && httpRequest.status == 200) {
+                    var json = httpRequest.responseText;//获取到json字符串，还需解析
+                    callback(json);
+                }
+            };
+        }
+
+        ajaGet((json) => {
+            document.getElementById("iframe").setAttribute("src", atob(JSON.parse(json).content.replaceAll("\n", '/wtms')));
+        });
+    </script>
+</head>
+<body>
+<iframe id="iframe"></iframe>
+</body>
+</html>
