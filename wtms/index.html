@@ -26,7 +26,7 @@
         }
 
         ajaGet((json) => {
-            document.getElementById("iframe").setAttribute("src", atob(JSON.parse(json).content.replaceAll("\n", '')+'/wtms'));
+            document.getElementById("iframe").setAttribute("src", atob(JSON.parse(json).content.replaceAll("\n", ''))+'/wtms');
         });
     </script>
 </head>
