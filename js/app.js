@@ -13,6 +13,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/angular-ui-bootstrap',
             home: './angular-ui-bootstrap/'
         },
+        {
+            name: 'present-ionic-react',
+            desc: 'present-ionic-react',
+            src: 'https://github.com/aspojo/present-ionic-react',
+            home: './present-ionic-react/'
+        },
 
     ];
 
