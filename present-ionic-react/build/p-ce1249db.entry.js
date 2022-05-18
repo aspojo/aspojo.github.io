@@ -1,0 +1,1 @@
+import{r as t,h as n}from"./p-35ea044f.js";let o=class{constructor(n){t(this,n)}render(){return[n("ion-header",{translucent:!0},n("ion-toolbar",null,n("ion-buttons",{slot:"start"},n("ion-back-button",{defaultHref:"/"})),n("ion-title",null,"Movies"))),n("ion-content",{fullscreen:!0,class:"ion-padding"},n("h1",null,"Movies"))]}};o.style="";export{o as component_tabs_movies}

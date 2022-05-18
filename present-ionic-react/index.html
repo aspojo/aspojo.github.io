@@ -1,51 +1,523 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover"><base href="/"><title>Ionic React</title><meta property="og:site_name" content="Ionic React"><meta property="og:title" content="Ionic React"><meta name="author" content="Building mobile, desktop, and web apps with React and Ionic"><meta name="description" content="Building mobile, desktop, and web apps with React and Ionic"><meta property="og:description" content="Building mobile, desktop, and web apps with React and Ionic"><meta property="og:site_name" content="Ionic React"><meta property="og:type" content="website"><meta property="og:url" content="https://ionicframework.com"><meta property="og:image" content="https://ionicframework.com/img/meta/ionic-framework-og.png"><meta property="og:image:type" content="image/png"><meta name="twitter:site" content="@ionicframework"><meta name="twitter:title" content="Ionic React"><meta name="twitter:description" content="Building mobile, desktop, and web apps with React and Ionic"><meta name="twitter:image:src" content="https://ionicframework.com/img/meta/ionic-framework-og.png"><meta name="twitter:card" content="summary"><link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png"><link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png"><link rel="shortcut icon" href="assets/favicon/favicon.ico"><meta name="msapplication-TileColor" content="#3880ff"><meta name="msapplication-config" content="assets/favicon/browserconfig.xml"><meta name="theme-color" content="#3880ff"><script>if ('serviceWorker' in navigator) {
-      window.addEventListener('load', async () => {
-        try {
-          await navigator.serviceWorker.register('service-worker.js');
-        } catch (e) {
-          console.warn('No service worker registered');
-        }
-      });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
+    <base href="./"/>
+    <title>Ionic React</title>
+    <meta property="og:site_name" content="Ionic React">
+    <meta property="og:title" content="Ionic React">
+    <meta name="author" content="Building mobile, desktop, and web apps with React and Ionic">
+    <meta name="description" content="Building mobile, desktop, and web apps with React and Ionic">
+    <meta property="og:description" content="Building mobile, desktop, and web apps with React and Ionic">
+    <meta property="og:site_name" content="Ionic React">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ionicframework.com">
+    <meta property="og:image" content="https://ionicframework.com/img/meta/ionic-framework-og.png">
+    <meta property="og:image:type" content="image/png">
+    <meta name="twitter:site" content="@ionicframework">
+    <meta name="twitter:title" content="Ionic React">
+    <meta name="twitter:description" content="Building mobile, desktop, and web apps with React and Ionic">
+    <meta name="twitter:image:src" content="https://ionicframework.com/img/meta/ionic-framework-og.png">
+    <meta name="twitter:card" content="summary">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
+    <link rel="shortcut icon" href="assets/favicon/favicon.ico">
+    <meta name="msapplication-TileColor" content="#3880ff">
+    <meta name="msapplication-config" content="assets/favicon/browserconfig.xml">
+    <meta name="theme-color" content="#3880ff">
+    <script>if ('serviceWorker' in navigator) {
+        window.addEventListener('load', async () => {
+            try {
+                await navigator.serviceWorker.register('service-worker.js');
+            } catch (e) {
+                console.warn('No service worker registered');
+            }
+        });
     }
 
     window.twttr = (function (d, s, id) {
-      var js, fjs = d.getElementsByTagName(s)[0],
-        t = window.twttr || {};
-      if (d.getElementById(id)) return t;
-      js = d.createElement(s);
-      js.id = id;
-      js.src = "https://platform.twitter.com/widgets.js";
-      fjs.parentNode.insertBefore(js, fjs);
-      t._e = [];
-      t.ready = function (f) {
-        t._e.push(f);
-      };
-      return t;
-      }(document, "script", "twitter-wjs"));</script><link rel="manifest" href="manifest.json"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="msapplication-tap-highlight" content="no"><style>:root {
-      background: #ffffff;
-      --ion-background-color: #ffffff;
+        var js, fjs = d.getElementsByTagName(s)[0],
+            t = window.twttr || {};
+        if (d.getElementById(id)) return t;
+        js = d.createElement(s);
+        js.id = id;
+        js.src = "https://platform.twitter.com/widgets.js";
+        fjs.parentNode.insertBefore(js, fjs);
+        t._e = [];
+        t.ready = function (f) {
+            t._e.push(f);
+        };
+        return t;
+    }(document, "script", "twitter-wjs"));</script>
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="msapplication-tap-highlight" content="no">
+    <style>:root {
+        background: #ffffff;
+        --ion-background-color: #ffffff;
     }
 
     deckgo-deck {
-      color: #445B78;
-      --color: #445B78;
-      --ion-text-color: #445B78;
+        color: #445B78;
+        --color: #445B78;
+        --ion-text-color: #445B78;
     }
 
     /* Until Web Components are loaded, don't display content */
     body {
-      background: #ffffff;
+        background: #ffffff;
     }
 
     ion-app.loading,
     ion-app.loading a {
-      color: transparent;
+        color: transparent;
     }
 
     ion-app.loading a {
-      color: transparent;
+        color: transparent;
     }
 
     ion-app.loading {
-      display: none;
-    }</style></head><body><ion-app class="loading"><ion-menu id="ion-menu" side="start" type="overlay" swipegesture="false" content-id="main"><ion-content><deckgo-chapters></deckgo-chapters></ion-content></ion-menu><div class="ion-page" id="main"><ion-header><ion-toolbar color="dark"><ion-buttons slot="start"><ion-menu-button></ion-menu-button></ion-buttons><ion-title>Ionic React</ion-title><ion-buttons slot="end"><ion-button id="deckMenu"><ion-icon ios="ellipsis-horizontal" md="ellipsis-vertical"></ion-icon></ion-button></ion-buttons></ion-toolbar></ion-header><ion-content force-overscroll="false" style="position: relative; --overflow: hidden;"><deckgo-deck id="slider" embedded="true"><deckgo-slide-split><div slot="title" style="display: none;">Ionic React</div><div slot="start"><h2>Ionic React</h2><div no-shadow="" slot="content"><h3>使用 React 构建 iOS、Android、桌面和渐进式 Web 应用程序</h3><a href="https://ionicframework.com/react" target="_blank" style="padding: 8px;">ionicframework.com/react</a></div></div><img slot="end" src="assets/img/ionic-react-icon.png"></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Ionic enables web developers to build cross-platform apps using just one codebase. In addition to open source offerings, Ionic helps teams build apps via support, enterprise-specific functionality, and DevOps services.</div><div slot="title" style="display: none;">What is Ionic Framework?</div><div slot="start"><h2>什么是 Ionic Framework?</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ 用于使用 Web 技术构建原生app、桌面和 Web 应用程序的跨平台 UI 工具包</ion-label></ion-item><ion-item><ion-label text-wrap="">✓ 为 Apple 和 Google Play 商店中超过 10% 的应用程序提供支持 [1]</ion-label></ion-item><ion-item><ion-label text-wrap="">✓ Used by more than 5 million developers in 200 countries</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 被 200 个国家的超过 500 万开发人员使用</ion-label></ion-item><ion-item>[1] <a href="https://appfigures.com/top-sdks/development/apps" target="_blank">https://appfigures.com/top-sdks/development/apps</a></ion-item></ion-list></div></div><img slot="end" src="assets/img/ionic-img.png"></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Ionic React uses open web standards and built-in browser capabilities, so it's compatible with any of the millions of web libraries out there.</div><div slot="title" style="display: none;">什么是 Ionic React?</div><div slot="start"><h2>什么是 Ionic React?</h2><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ Ionic 框架的 React 风格</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 100 多个 React 组件：模态框、菜单、选项卡、导航、列表、卡片等等！</ion-label></ion-item><ion-item><ion-label text-wrap="">✓ 使用单一代码库构建跨平台、原生质量的应用程序</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 这只是 React ！与大多数 React 库和工具兼容</ion-label></ion-item></ion-list></div><img slot="end" src="assets/img/ionic-components-img.png"></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">More than just the UI toolkit - it's a complete app building platform.</div><div slot="title" style="display: none;">Ionic 平台</div><div slot="start"><h2>Ionic 平台</h2><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ 用于构建跨平台应用程序的端到端平台</ion-label></ion-item><ion-item><ion-label text-wrap="">️<b>✓ Ionic Framework:</b> 开源、跨平台的组件库</ion-label></ion-item><ion-item><ion-label text-wrap=""><b>✓ Ionic ️Capacitor:</b> 本地运行时</ion-label></ion-item><ion-item><ion-label text-wrap=""><b>✓ Ionic Native:</b> 优质的本地解决方案和核心插件 Premium native solutions and core plugins</ion-label></ion-item><ion-item><ion-label text-wrap=""><b>✓ Ionic Appflow:</b> 移动 DevOps</ion-label></ion-item></ion-list></div><img slot="end" src="assets/img/ionic-platform-stack.png"></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">See all Ionic components in action using the embedded demo app.</div><div slot="title" style="display: none;">UI 组件</div><div slot="start"><h2>UI 组件</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ 100+ web 组件</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 框架不可知论</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 强大的主题</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 原生风格的导航</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 高性能动画</ion-label></ion-item></ion-list></div></div><div class="docs-demo-device ios" slot="end"><figure><svg class="docs-demo-device__md-bar" viewBox="0 0 1384.3 40.3"><path class="st0" d="M1343 5l18.8 32.3c.8 1.3 2.7 1.3 3.5 0L1384 5c.8-1.3-.2-3-1.7-3h-37.6c-1.5 0-2.5 1.7-1.7 3z"></path><circle class="st0" cx="1299" cy="20.2" r="20"></circle><path class="st0" d="M1213 1.2h30c2.2 0 4 1.8 4 4v30c0 2.2-1.8 4-4 4h-30c-2.2 0-4-1.8-4-4v-30c0-2.3 1.8-4 4-4zM16 4.2h64c8.8 0 16 7.2 16 16s-7.2 16-16 16H16c-8.8 0-16-7.2-16-16s7.2-16 16-16z"></path></svg> <svg class="docs-demo-device__ios-notch" viewBox="0 0 219 31"><path d="M0 1V0h219v1a5 5 0 0 0-5 5v3c0 12.15-9.85 22-22 22H27C14.85 31 5 21.15 5 9V6a5 5 0 0 0-5-5z" fill-rule="evenodd"></path></svg><iframe src="https://ionic-docs-demo.herokuapp.com/?ionic:mode=ios" loading="lazy"></iframe></figure></div></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Example of Ionic Card component alongside actual code</div><div slot="title" style="display: none;">IonCard</div><div slot="start"><h2>&lt;IonCard&gt;</h2><ion-card class="apps-card"><ion-card-header><ion-card-subtitle>Your Daily List</ion-card-subtitle><ion-card-title>Ionic Apps We Think You'll Love.</ion-card-title></ion-card-header><ion-card-content><ion-list><ion-item><ion-thumbnail slot="start"><img src="/assets/img/logo-sworkit.png"></ion-thumbnail><ion-label><h3>Sworkit</h3><p>The number one fitness app</p></ion-label></ion-item><ion-item><ion-thumbnail slot="start"><img src="/assets/img/logo-untappd.png"></ion-thumbnail><ion-label><h3>Untappd</h3><p>Discover and share beer</p></ion-label></ion-item><ion-item><ion-thumbnail slot="start"><img src="/assets/img/logo-shipt.png"></ion-thumbnail><ion-label><h3>Shipt</h3><p>Bring the store to your door</p></ion-label></ion-item><ion-item lines="none"><ion-thumbnail slot="start"><img src="/assets/img/logo-amtrak.png"></ion-thumbnail><ion-label><h3>Amtrak</h3><p>Book a trip today</p></ion-label></ion-item></ion-list></ion-card-content></ion-card></div><p slot="end"><deckgo-highlight-code src="assets/code/card.jsx"></deckgo-highlight-code></p></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Ionic implements all native animation/gesture details so you can focus on building your app.</div><div slot="title" style="display: none;">手势 &amp; 动画</div><div slot="start"><h2>手势 &amp; 动画</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️️✓ 自适应样式</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 原生风格的导航</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 高性能动画</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 最新的 UI 设计</ion-label></ion-item></ion-list></div></div><video slot="end" autoplay="" muted="" loop="" style="width: 100%;"><source src="assets/video/large-title-dark.mov"></video></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Ionic implements all native animation/gesture details so you can focus on building your app.</div><div slot="title" style="display: none;">以滑动的方式关闭弹窗</div><div slot="start"><h2>以滑动的方式关闭弹窗</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️️✓ 最新的ios设计</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 仅需要两个属性</ion-label></ion-item></ion-list></div></div><video slot="end" autoplay="" muted="" loop="" style="width: 100%;"><source src="assets/video/modal-light.mov"></video></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Rich page transitions out of the box, using routing that's familiar to React devs.</div><div slot="title" style="display: none;">路由/导航</div><div slot="start"><h2>路由/导航</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ ️丰富的页面过渡效果</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ ️基于 React Route</ion-label></ion-item></ion-list></div></div><p slot="end"><deckgo-highlight-code src="assets/code/routing-app.jsx"></deckgo-highlight-code></p></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Ionic React apps are automatically set up for unit and integration testing with Jest, React Testing Library, and a small suite of utilities for testing Ionic-specific concepts.</div><div slot="title" style="display: none;">测试</div><div slot="start"><h2>测试</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ Jest</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ ️React Testing Library</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ ️Ionic React Testing Utils</ion-label></ion-item></ion-list></div></div><p slot="end"><deckgo-highlight-code src="assets/code/test-todos.jsx"></deckgo-highlight-code></p></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Ionic React provides first class PWA support and recommends Zeit for hosting.</div><div slot="title" style="display: none;">渐进式 Web 应用</div><div slot="start"><h2>渐进式 Web 应用</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ 开箱即用</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ ️具有缓存优先策略的预配置 Service Worker</ion-label></ion-item><ion-item><ion-label text-wrap="">️️✓ 易于部署</ion-label></ion-item></ion-list></div></div><p slot="end"><deckgo-highlight-code src="assets/code/pwa.jsx"></deckgo-highlight-code><deckgo-highlight-code src="assets/code/pwa-deploy.txt"></deckgo-highlight-code></p></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">Capacitor builds upon lessons learned from Cordova, React Native, and others to provide a modern native runtime tool. "Code once, configure everywhere" means that Cap embraces native project management and tooling. By not creating custom tooling that breaks easily, it's easier to update and manage native projects over time.</div><div slot="title" style="display: none;">Capacitor</div><div slot="start"><h2>本地能力: Capacitor</h2><div><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ ️跨平台: iOS, Android, Desktop, Web</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 基于 Web 标准的 API</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ ️"一次编码，随处配置"</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ ️灵感：Cordova、React Native 和 Turbolinks</ion-label></ion-item></ion-list></div><a href="https://capacitor.ionicframework.com" target="_blank" style="padding-left: 17px; padding-top: 50px;">capacitor.ionicframework.com</a></div><p slot="end"><deckgo-highlight-code src="assets/code/capacitor.ts"></deckgo-highlight-code></p></deckgo-slide-split><deckgo-slide-split><div slot="notes" show="">React Native is a great tool for building mobile apps. There are some differences though. Many React libraries don't support RN, RN does not officially support PWAs, and Facebook does not offer dedicated support. For developers looking to build a PWA as well as mobile (and desktop), Ionic React is the way to go.</div><div slot="title" style="display: none;">与 React Native 的比较</div><div slot="start"><h2>与 React Native 的比较</h2><ion-list lines="none" padding-top=""><ion-item><ion-label text-wrap="">️✓ Web 标准和 React DOM</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 一流的 PWA</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 在浏览器中构建</ion-label></ion-item><ion-item><ion-label text-wrap="">️✓ 官方企业支持</ion-label></ion-item></ion-list></div><img slot="end" src="assets/img/react-native-vs-ionic-react.png"></deckgo-slide-split><deckgo-slide-title><div slot="notes" show="">Two ways to get started: using the Ionic CLI or the App Wizard.</div><h2 slot="title">创建一个 Ionic React 应用 🚀</h2><div slot="content"><div style="padding: 32px;"><b style="font-size: 1.5em;">CLI:</b><deckgo-highlight-code src="assets/code/ionic-start.txt"></deckgo-highlight-code></div><p style="margin-bottom: 0; margin-top: 16px; font-size: 0.5em;"></p><ul style="list-style-type:none;"><li><b>App 向导:</b></li><li><a href="https://ionicframework.com/start" target="_blank">ionicframework.com/start</a></li></ul><p></p><p style="margin-bottom: 0; margin-top: 48px; padding-bottom: 10px; font-size: 0.5em;">Built by aspojo 💙<br><br>Dive deeper: <a href="https://ionicframework.com/react" target="_blank">ionicframework.com/react</a></p><div id="twitter-share" class="animated bounceInUp"><a href="https://twitter.com/IonicFramework?ref_src=twsrc%5Etfw" class="twitter-follow-button" data-show-count="false">Follow @IonicFramework</a> <a href="https://twitter.com/share?ref_src=twsrc%5Etfw" class="twitter-share-button" data-text="Give a presentation on Ionic React!" data-url="https://github.com/ionic-team/present-ionic-react" data-via="IonicFramework" data-hashtags="PresentIonic" data-show-count="false">Share</a></div></div></deckgo-slide-title></deckgo-deck><deckgo-remote></deckgo-remote><button id="previous" class="navigation ion-activatable"><ion-ripple-effect></ion-ripple-effect><ion-icon name="chevron-back-outline" aria-label="Previous slide"></ion-icon></button> <button id="next" class="navigation ion-activatable"><ion-ripple-effect></ion-ripple-effect><ion-icon name="chevron-forward-outline" aria-label="Next slide"></ion-icon></button></ion-content><ion-fab vertical="top" horizontal="end" slot="fixed" id="navigation"><button id="slidePicker" class="navigation ion-activatable"><ion-ripple-effect></ion-ripple-effect><ion-icon src="https://deckdeckgo.com/assets/icons/ionicons/md-list.svg" aria-label="Jump to a particular slide"></ion-icon></button> <button id="fullScreen" class="navigation ion-activatable hide-on-mobile"><ion-ripple-effect></ion-ripple-effect><ion-icon name="contract-outline" aria-label="Exit full screen"></ion-icon></button> <button id="remote" class="navigation ion-activatable"><ion-ripple-effect></ion-ripple-effect><ion-icon name="phone-portrait-outline" aria-label="Open Remote"></ion-icon></button></ion-fab><web-social-share show="false" style="--web-social-share-backdrop-opacity: 0.5;"><ion-icon name="logo-twitter" aria-label="Twitter" slot="twitter" style="color: #00aced; font-size: 1.6rem; display: block;"></ion-icon><ion-icon name="logo-reddit" aria-label="Reddit" slot="reddit" style="font-size: 1.6rem; display: block;"></ion-icon><ion-icon name="logo-linkedin" aria-label="Linkedin" slot="linkedin" style="color: #0077b5; font-size: 1.6rem; display: block;"></ion-icon><ion-icon name="mail" slot="email" aria-label="Email" style="color: #ff8ea3; font-size: 1.6rem; display: block;"></ion-icon><ion-icon name="logo-whatsapp" aria-label="WhatsApp" slot="whatsapp" style="color: #25D366; font-size: 1.6rem; display: block;"></ion-icon><ion-icon name="logo-hackernews" aria-label="Hacker News" slot="hackernews" style="color: #ff6000; font-size: 1.6rem; display: block;"></ion-icon></web-social-share></div></ion-app><noscript>Please enable Javascript to access this presentation.</noscript><script src="main.e5df05b33b9f7a5726cb.js?c15bd494c5de06b520db"></script></body></html>
+        display: none;
+    }</style>
+</head>
+<body>
+<ion-app class="loading">
+    <ion-menu id="ion-menu" side="start" type="overlay" swipegesture="false" content-id="main">
+        <ion-content>
+            <deckgo-chapters></deckgo-chapters>
+        </ion-content>
+    </ion-menu>
+    <div class="ion-page" id="main">
+        <ion-header>
+            <ion-toolbar color="dark">
+                <ion-buttons slot="start">
+                    <ion-menu-button></ion-menu-button>
+                </ion-buttons>
+                <ion-title>Ionic React</ion-title>
+                <ion-buttons slot="end">
+                    <ion-button id="deckMenu">
+                        <ion-icon ios="ellipsis-horizontal" md="ellipsis-vertical"></ion-icon>
+                    </ion-button>
+                </ion-buttons>
+            </ion-toolbar>
+        </ion-header>
+        <ion-content force-overscroll="false" style="position: relative; --overflow: hidden;">
+            <deckgo-deck id="slider" embedded="true">
+                <deckgo-slide-split>
+                    <div slot="title" style="display: none;">Ionic React</div>
+                    <div slot="start"><h2>Ionic React</h2>
+                        <div no-shadow="" slot="content"><h3>使用 React 构建 iOS、Android、桌面和渐进式 Web 应用程序</h3><a
+                                href="https://ionicframework.com/react" target="_blank" style="padding: 8px;">ionicframework.com/react</a>
+                        </div>
+                    </div>
+                    <img slot="end" src="assets/img/ionic-react-icon.png"></deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Ionic enables web developers to build cross-platform apps using just one
+                        codebase. In addition to open source offerings, Ionic helps teams build apps via support,
+                        enterprise-specific functionality, and DevOps services.
+                    </div>
+                    <div slot="title" style="display: none;">什么是 Ionic Framework?</div>
+                    <div slot="start"><h2>什么是 Ionic Framework?</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 用于使用 Web 技术构建原生app、桌面和 Web 应用程序的跨平台 UI 工具包</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">✓ 为 Apple 和 Google Play 商店中超过 10% 的应用程序提供支持 [1]</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">✓ Used by more than 5 million developers in 200 countries
+                                    </ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 被 200 个国家的超过 500 万开发人员使用</ion-label>
+                                </ion-item>
+                                <ion-item>[1] <a href="https://appfigures.com/top-sdks/development/apps"
+                                                 target="_blank">https://appfigures.com/top-sdks/development/apps</a>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                    </div>
+                    <img slot="end" src="assets/img/ionic-img.png"></deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Ionic React uses open web standards and built-in browser capabilities, so
+                        it's compatible with any of the millions of web libraries out there.
+                    </div>
+                    <div slot="title" style="display: none;">什么是 Ionic React?</div>
+                    <div slot="start"><h2>什么是 Ionic React?</h2>
+                        <ion-list lines="none" padding-top="">
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ Ionic 框架的 React 风格</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ 100 多个 React 组件：模态框、菜单、选项卡、导航、列表、卡片等等！</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap="">✓ 使用单一代码库构建跨平台、原生质量的应用程序</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ 这只是 React ！与大多数 React 库和工具兼容</ion-label>
+                            </ion-item>
+                        </ion-list>
+                    </div>
+                    <img slot="end" src="assets/img/ionic-components-img.png"></deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">More than just the UI toolkit - it's a complete app building platform.
+                    </div>
+                    <div slot="title" style="display: none;">Ionic 平台</div>
+                    <div slot="start"><h2>Ionic 平台</h2>
+                        <ion-list lines="none" padding-top="">
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ 用于构建跨平台应用程序的端到端平台</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap="">️<b>✓ Ionic Framework:</b> 开源、跨平台的组件库</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap=""><b>✓ Ionic ️Capacitor:</b> 本地运行时</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap=""><b>✓ Ionic Native:</b> 优质的本地解决方案和核心插件 Premium native solutions
+                                    and core plugins
+                                </ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap=""><b>✓ Ionic Appflow:</b> 移动 DevOps</ion-label>
+                            </ion-item>
+                        </ion-list>
+                    </div>
+                    <img slot="end" src="assets/img/ionic-platform-stack.png"></deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">See all Ionic components in action using the embedded demo app.</div>
+                    <div slot="title" style="display: none;">UI 组件</div>
+                    <div slot="start"><h2>UI 组件</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 100+ web 组件</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 框架不可知论</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 强大的主题</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 原生风格的导航</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 高性能动画</ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                    </div>
+                    <div class="docs-demo-device ios" slot="end">
+                        <figure>
+                            <svg class="docs-demo-device__md-bar" viewBox="0 0 1384.3 40.3">
+                                <path class="st0"
+                                      d="M1343 5l18.8 32.3c.8 1.3 2.7 1.3 3.5 0L1384 5c.8-1.3-.2-3-1.7-3h-37.6c-1.5 0-2.5 1.7-1.7 3z"></path>
+                                <circle class="st0" cx="1299" cy="20.2" r="20"></circle>
+                                <path class="st0"
+                                      d="M1213 1.2h30c2.2 0 4 1.8 4 4v30c0 2.2-1.8 4-4 4h-30c-2.2 0-4-1.8-4-4v-30c0-2.3 1.8-4 4-4zM16 4.2h64c8.8 0 16 7.2 16 16s-7.2 16-16 16H16c-8.8 0-16-7.2-16-16s7.2-16 16-16z"></path>
+                            </svg>
+                            <svg class="docs-demo-device__ios-notch" viewBox="0 0 219 31">
+                                <path d="M0 1V0h219v1a5 5 0 0 0-5 5v3c0 12.15-9.85 22-22 22H27C14.85 31 5 21.15 5 9V6a5 5 0 0 0-5-5z"
+                                      fill-rule="evenodd"></path>
+                            </svg>
+                            <iframe src="ionic-demo.html?ionic:mode=ios" loading="lazy"></iframe>
+                        </figure>
+                    </div>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Example of Ionic Card component alongside actual code</div>
+                    <div slot="title" style="display: none;">IonCard</div>
+                    <div slot="start"><h2>&lt;IonCard&gt;</h2>
+                        <ion-card class="apps-card">
+                            <ion-card-header>
+                                <ion-card-subtitle>Your Daily List</ion-card-subtitle>
+                                <ion-card-title>Ionic Apps We Think You'll Love.</ion-card-title>
+                            </ion-card-header>
+                            <ion-card-content>
+                                <ion-list>
+                                    <ion-item>
+                                        <ion-thumbnail slot="start"><img src="assets/img/logo-sworkit.png">
+                                        </ion-thumbnail>
+                                        <ion-label><h3>Sworkit</h3>
+                                            <p>The number one fitness app</p></ion-label>
+                                    </ion-item>
+                                    <ion-item>
+                                        <ion-thumbnail slot="start"><img src="assets/img/logo-untappd.png">
+                                        </ion-thumbnail>
+                                        <ion-label><h3>Untappd</h3>
+                                            <p>Discover and share beer</p></ion-label>
+                                    </ion-item>
+                                    <ion-item>
+                                        <ion-thumbnail slot="start"><img src="assets/img/logo-shipt.png">
+                                        </ion-thumbnail>
+                                        <ion-label><h3>Shipt</h3>
+                                            <p>Bring the store to your door</p></ion-label>
+                                    </ion-item>
+                                    <ion-item lines="none">
+                                        <ion-thumbnail slot="start"><img src="assets/img/logo-amtrak.png">
+                                        </ion-thumbnail>
+                                        <ion-label><h3>Amtrak</h3>
+                                            <p>Book a trip today</p></ion-label>
+                                    </ion-item>
+                                </ion-list>
+                            </ion-card-content>
+                        </ion-card>
+                    </div>
+                    <p slot="end">
+                        <deckgo-highlight-code src="assets/code/card.jsx"></deckgo-highlight-code>
+                    </p>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Ionic implements all native animation/gesture details so you can focus on
+                        building your app.
+                    </div>
+                    <div slot="title" style="display: none;">手势 &amp; 动画</div>
+                    <div slot="start"><h2>手势 &amp; 动画</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️️✓ 自适应样式</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 原生风格的导航</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 高性能动画</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 最新的 UI 设计</ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                    </div>
+                    <video slot="end" autoplay="" muted="" loop="" style="width: 100%;">
+                        <source src="assets/video/large-title-dark.mov">
+                    </video>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Ionic implements all native animation/gesture details so you can focus on
+                        building your app.
+                    </div>
+                    <div slot="title" style="display: none;">以滑动的方式关闭弹窗</div>
+                    <div slot="start"><h2>以滑动的方式关闭弹窗</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️️✓ 最新的ios设计</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 仅需要两个属性</ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                    </div>
+                    <video slot="end" autoplay="" muted="" loop="" style="width: 100%;">
+                        <source src="assets/video/modal-light.mov">
+                    </video>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Rich page transitions out of the box, using routing that's familiar to
+                        React devs.
+                    </div>
+                    <div slot="title" style="display: none;">路由/导航</div>
+                    <div slot="start"><h2>路由/导航</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️丰富的页面过渡效果</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️基于 React Route</ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                    </div>
+                    <p slot="end">
+                        <deckgo-highlight-code src="assets/code/routing-app.jsx"></deckgo-highlight-code>
+                    </p>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Ionic React apps are automatically set up for unit and integration testing
+                        with Jest, React Testing Library, and a small suite of utilities for testing Ionic-specific
+                        concepts.
+                    </div>
+                    <div slot="title" style="display: none;">测试</div>
+                    <div slot="start"><h2>测试</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ Jest</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️React Testing Library</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️Ionic React Testing Utils</ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                    </div>
+                    <p slot="end">
+                        <deckgo-highlight-code src="assets/code/test-todos.jsx"></deckgo-highlight-code>
+                    </p>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Ionic React provides first class PWA support and recommends Zeit for
+                        hosting.
+                    </div>
+                    <div slot="title" style="display: none;">渐进式 Web 应用</div>
+                    <div slot="start"><h2>渐进式 Web 应用</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 开箱即用</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️具有缓存优先策略的预配置 Service Worker</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️️✓ 易于部署</ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                    </div>
+                    <p slot="end">
+                        <deckgo-highlight-code src="assets/code/pwa.jsx"></deckgo-highlight-code>
+                        <deckgo-highlight-code src="assets/code/pwa-deploy.txt"></deckgo-highlight-code>
+                    </p>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">Capacitor builds upon lessons learned from Cordova, React Native, and
+                        others to provide a modern native runtime tool. "Code once, configure everywhere" means that Cap
+                        embraces native project management and tooling. By not creating custom tooling that breaks
+                        easily, it's easier to update and manage native projects over time.
+                    </div>
+                    <div slot="title" style="display: none;">Capacitor</div>
+                    <div slot="start"><h2>本地能力: Capacitor</h2>
+                        <div>
+                            <ion-list lines="none" padding-top="">
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️跨平台: iOS, Android, Desktop, Web</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ 基于 Web 标准的 API</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️"一次编码，随处配置"</ion-label>
+                                </ion-item>
+                                <ion-item>
+                                    <ion-label text-wrap="">️✓ ️灵感：Cordova、React Native 和 Turbolinks</ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </div>
+                        <a href="https://capacitor.ionicframework.com" target="_blank"
+                           style="padding-left: 17px; padding-top: 50px;">capacitor.ionicframework.com</a></div>
+                    <p slot="end">
+                        <deckgo-highlight-code src="assets/code/capacitor.ts"></deckgo-highlight-code>
+                    </p>
+                </deckgo-slide-split>
+                <deckgo-slide-split>
+                    <div slot="notes" show="">React Native is a great tool for building mobile apps. There are some
+                        differences though. Many React libraries don't support RN, RN does not officially support PWAs,
+                        and Facebook does not offer dedicated support. For developers looking to build a PWA as well as
+                        mobile (and desktop), Ionic React is the way to go.
+                    </div>
+                    <div slot="title" style="display: none;">与 React Native 的比较</div>
+                    <div slot="start"><h2>与 React Native 的比较</h2>
+                        <ion-list lines="none" padding-top="">
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ Web 标准和 React DOM</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ 一流的 PWA</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ 在浏览器中构建</ion-label>
+                            </ion-item>
+                            <ion-item>
+                                <ion-label text-wrap="">️✓ 官方企业支持</ion-label>
+                            </ion-item>
+                        </ion-list>
+                    </div>
+                    <img slot="end" src="assets/img/react-native-vs-ionic-react.png"></deckgo-slide-split>
+                <deckgo-slide-title>
+                    <div slot="notes" show="">Two ways to get started: using the Ionic CLI or the App Wizard.</div>
+                    <h2 slot="title">创建一个 Ionic React 应用 🚀</h2>
+                    <div slot="content">
+                        <div style="padding: 32px;"><b style="font-size: 1.5em;">CLI:</b>
+                            <deckgo-highlight-code src="assets/code/ionic-start.txt"></deckgo-highlight-code>
+                        </div>
+                        <p style="margin-bottom: 0; margin-top: 16px; font-size: 0.5em;"></p>
+                        <ul style="list-style-type:none;">
+                            <li><b>App 向导:</b></li>
+                            <li><a href="https://ionicframework.com/start" target="_blank">ionicframework.com/start</a>
+                            </li>
+                        </ul>
+                        <p></p>
+                        <p style="margin-bottom: 0; margin-top: 48px; padding-bottom: 10px; font-size: 0.5em;">Built by
+                            aspojo 💙<br><br>Dive deeper: <a href="https://ionicframework.com/react" target="_blank">ionicframework.com/react</a>
+                        </p>
+                        <div id="twitter-share" class="animated bounceInUp"><a
+                                href="https://twitter.com/IonicFramework?ref_src=twsrc%5Etfw"
+                                class="twitter-follow-button" data-show-count="false">Follow @IonicFramework</a> <a
+                                href="https://twitter.com/share?ref_src=twsrc%5Etfw" class="twitter-share-button"
+                                data-text="Give a presentation on Ionic React!"
+                                data-url="https://github.com/ionic-team/present-ionic-react" data-via="IonicFramework"
+                                data-hashtags="PresentIonic" data-show-count="false">Share</a></div>
+                    </div>
+                </deckgo-slide-title>
+            </deckgo-deck>
+            <deckgo-remote></deckgo-remote>
+            <button id="previous" class="navigation ion-activatable">
+                <ion-ripple-effect></ion-ripple-effect>
+                <ion-icon name="chevron-back-outline" aria-label="Previous slide"></ion-icon>
+            </button>
+            <button id="next" class="navigation ion-activatable">
+                <ion-ripple-effect></ion-ripple-effect>
+                <ion-icon name="chevron-forward-outline" aria-label="Next slide"></ion-icon>
+            </button>
+        </ion-content>
+        <ion-fab vertical="top" horizontal="end" slot="fixed" id="navigation">
+            <button id="slidePicker" class="navigation ion-activatable">
+                <ion-ripple-effect></ion-ripple-effect>
+                <ion-icon src="https://deckdeckgo.com/assets/icons/ionicons/md-list.svg"
+                          aria-label="Jump to a particular slide"></ion-icon>
+            </button>
+            <button id="fullScreen" class="navigation ion-activatable hide-on-mobile">
+                <ion-ripple-effect></ion-ripple-effect>
+                <ion-icon name="contract-outline" aria-label="Exit full screen"></ion-icon>
+            </button>
+            <button id="remote" class="navigation ion-activatable">
+                <ion-ripple-effect></ion-ripple-effect>
+                <ion-icon name="phone-portrait-outline" aria-label="Open Remote"></ion-icon>
+            </button>
+        </ion-fab>
+        <web-social-share show="false" style="--web-social-share-backdrop-opacity: 0.5;">
+            <ion-icon name="logo-twitter" aria-label="Twitter" slot="twitter"
+                      style="color: #00aced; font-size: 1.6rem; display: block;"></ion-icon>
+            <ion-icon name="logo-reddit" aria-label="Reddit" slot="reddit"
+                      style="font-size: 1.6rem; display: block;"></ion-icon>
+            <ion-icon name="logo-linkedin" aria-label="Linkedin" slot="linkedin"
+                      style="color: #0077b5; font-size: 1.6rem; display: block;"></ion-icon>
+            <ion-icon name="mail" slot="email" aria-label="Email"
+                      style="color: #ff8ea3; font-size: 1.6rem; display: block;"></ion-icon>
+            <ion-icon name="logo-whatsapp" aria-label="WhatsApp" slot="whatsapp"
+                      style="color: #25D366; font-size: 1.6rem; display: block;"></ion-icon>
+            <ion-icon name="logo-hackernews" aria-label="Hacker News" slot="hackernews"
+                      style="color: #ff6000; font-size: 1.6rem; display: block;"></ion-icon>
+        </web-social-share>
+    </div>
+</ion-app>
+<noscript>Please enable Javascript to access this presentation.</noscript>
+<script src="main.e5df05b33b9f7a5726cb.js?4761dd91063cfa308c07"></script>
+</body>
+</html>
