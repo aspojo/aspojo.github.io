@@ -2,6 +2,7 @@
 <html lang="en" class="no-js no-webp">
 <head>
 
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <base href="./">
     <!-- Fonts -->
@@ -23,12 +24,12 @@
     <script src="assets/unpkg.com/react-router@6/umd/react-router.production.min.js" crossorigin></script>
     <script src="assets/unpkg.com/react-router-dom@6/umd/react-router-dom.production.min.js" crossorigin></script>
 
-<!--    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>-->
-<!--    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>-->
-<!--    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>-->
-<!--    <script src="https://unpkg.com/history@5/umd/history.development.js" crossorigin></script>-->
-<!--    <script src="https://unpkg.com/react-router@6/umd/react-router.development.js" crossorigin></script>-->
-<!--    <script src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js" crossorigin></script>-->
+    <!--    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>-->
+    <!--    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>-->
+    <!--    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>-->
+    <!--    <script src="https://unpkg.com/history@5/umd/history.development.js" crossorigin></script>-->
+    <!--    <script src="https://unpkg.com/react-router@6/umd/react-router.development.js" crossorigin></script>-->
+    <!--    <script src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js" crossorigin></script>-->
 
 
 </head>
@@ -103,22 +104,24 @@
 
                 ,
 
-            <Router key="3">
-                <header id="header" key="2">
-                    <NavLink to="/roots" children={({ isActive })=><button className={"btn btn-"+(isActive?"blue":"white")}>roots</button>}></NavLink>
-                    <NavLink to="/rootcasts" children={({ isActive })=><button className={"btn btn-"+(isActive?"blue":"white")}>rootcasts</button>}></NavLink>
-                </header>
+                <Router key="3">
+                    <header id="header" key="2">
+                        <NavLink to="/roots" children={({isActive}) => <button
+                            className={"btn btn-" + (isActive ? "blue" : "white")}>roots</button>}></NavLink>
+                        <NavLink to="/rootcasts" children={({isActive}) => <button
+                            className={"btn btn-" + (isActive ? "blue" : "white")}>rootcasts</button>}></NavLink>
+                    </header>
 
-                <Routes>
-                    <Route path="/" element={<Navigate to="/roots"/>}/>
+                    <Routes>
+                        <Route path="/" element={<Navigate to="/roots"/>}/>
 
-                    <Route path="/roots" element={<RootsPage items={this.state.roots}/>}/>
-                    <Route path="/roots/:root" element={<RootPage items={this.state.roots}/>}/>
-                    <Route path="/rootcasts" element={<RootcastsPage rootcasts={this.state.rootcasts}/>}/>
-                    <Route path="/rootcasts/:rootcast" element={<RootcastPage rootcasts={this.state.rootcasts}/>}/>
-                </Routes>
-            </Router>
-                ];
+                        <Route path="/roots" element={<RootsPage items={this.state.roots}/>}/>
+                        <Route path="/roots/:root" element={<RootPage items={this.state.roots}/>}/>
+                        <Route path="/rootcasts" element={<RootcastsPage rootcasts={this.state.rootcasts}/>}/>
+                        <Route path="/rootcasts/:rootcast" element={<RootcastPage rootcasts={this.state.rootcasts}/>}/>
+                    </Routes>
+                </Router>
+            ];
         }
     }
 
@@ -147,18 +150,27 @@
         }
 
         render() {
-            const items = this.props.items;
-            const {audioOnly, commonOnly, key} = this.state;
+            const {audioOnly, commonOnly} = this.state;
+
+            const items = this.props.items
+                .filter(item =>
+                    (
+                        Utils.searchKeywords(item.title, this.state.key) ||
+                        Utils.searchKeywords(item.description, this.state.key)
+                    )
+                    && (!audioOnly || (audioOnly && item.hasAudio))
+                    && (!commonOnly || (commonOnly && item.common))
+                );
             return <main id="main">
                 <section className="page-title">
                     <div className="container">
                         <h1>Word Roots</h1>
                         <p>Learning about the building blocks of words can help you make sense of unfamiliar
                             words.</p>
-                        <form id="roots-search-form">
+                        <form id="roots-search-form" onKeyDown={(event)=> event.key != 'Enter'}>
                             <div className="roots-search">
                                 <div className="roots-search-textfield">
-                                    <input type="search" id="search" placeholder="Search roots&hellip;"
+                                    <input type="input" id="search" placeholder="Search roots&hellip;"
                                            onChange={this.search}/>
                                 </div>
                                 <div className="roots-search-checkbox">
@@ -182,15 +194,10 @@
                 <section className="bg-lt-gray">
                     <div className="roots container">
                         {items
-                            .filter(item =>
-                                (key === '' || item.root.indexOf(key) > -1)
-                                && (!audioOnly || (audioOnly && item.hasAudio))
-                                && (!commonOnly || (commonOnly && item.common))
-                            )
                             .map(item =>
                                 <div className="root" data-audio={item.hasAudio} data-common={item.common}
-                                     data-root={item.root} key={item.root}>
-                                    <a href={'#/roots/' + item.root}>
+                                     data-root={item.root} key={item.key}>
+                                    <a href={'#/roots/' + item.key}>
                                         <h2>{item.title}</h2>
                                         <p>{item.description}</p>
                                     </a>
@@ -208,7 +215,7 @@
     function RootPage(props) {
         let {root} = ReactRouterDOM.useParams();
         let {items} = props;
-        const i = items.findIndex(item => item.root == root);
+        const i = items.findIndex(item => item.key == root);
         const content = i > -1 ? items[i].content : '';
 
         return <div>
@@ -230,17 +237,22 @@
 
 
         render() {
-            const rootcasts = this.props.rootcasts;
             const {key} = this.state;
+
+            const rootcasts = this.props.rootcasts
+                .filter(item => Utils.searchKeywords(item.title, key) ||
+                    Utils.searchKeywords(item.subtitle, key) ||
+                    Utils.searchKeywords(item.description, key))
+            ;
             return <main id="main">
                 <section className="page-title">
                     <div className="container">
                         <h1>Rootcasts</h1>
                         <p>Learn how word parts combine to create English vocabulary.</p>
-                        <form id="roots-search-form">
+                        <form id="roots-search-form" onKeyDown={(event)=> event.key != 'Enter'}>
                             <div className="roots-search">
                                 <div className="roots-search-textfield">
-                                    <input type="search" id="search" placeholder="Search rootcasts&hellip;"
+                                    <input type="iput" id="search" placeholder="Search rootcasts&hellip;"
                                            onChange={() => this.setState({key: event.target.value})}/>
                                 </div>
                             </div>
@@ -249,22 +261,20 @@
                 </section>
                 <section className="bg-lt-gray">
                     <div className="resources container">
-                        {rootcasts
-                            .filter(item => Utils.searchKeywords(item.title, key) || Utils.searchKeywords(item.subtitle, key)|| Utils.searchKeywords(item.description, key))
-                            .map(item =>
-                                <div className="resource" key={item.key}>
-                                    <div>
-                                        <h2>{item.title}</h2>
-                                        <p>{item.subtitle}</p>
-                                        <p className="content" dangerouslySetInnerHTML={{__html: item.description}}></p>
-                                    </div>
-                                    <div className="cta">
-                                        <a href={'#/rootcasts/' + item.key} className="btn btn-white btn-small">
-                                            View Rootcast
-                                        </a>
-                                    </div>
+                        {rootcasts.map(item =>
+                            <div className="resource" key={item.key}>
+                                <div>
+                                    <h2>{item.title}</h2>
+                                    <p>{item.subtitle}</p>
+                                    <p className="content" dangerouslySetInnerHTML={{__html: item.description}}></p>
                                 </div>
-                            )}
+                                <div className="cta">
+                                    <a href={'#/rootcasts/' + item.key} className="btn btn-white btn-small">
+                                        View Rootcast
+                                    </a>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </section>
             </main>;
@@ -278,7 +288,6 @@
     function RootcastPage(props) {
         let {rootcast} = ReactRouterDOM.useParams();
         let {rootcasts} = props;
-        console.log("rootcasts", rootcasts)
         const i = rootcasts.findIndex(item => item.key == rootcast);
         const content = i > -1 ? rootcasts[i].content : '';
 

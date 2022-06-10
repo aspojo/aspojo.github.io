@@ -19,6 +19,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/present-ionic-react',
             home: './present-ionic-react/'
         },
+        {
+            name: 'words-root',
+            desc: 'words-root',
+            src: 'https://github.com/aspojo/words-root',
+            home: './words-root/'
+        },
 
     ];
 
