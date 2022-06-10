@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js no-webp">
+<head>
+
+
+    <!-- Fonts -->
+    <link rel="preload" href="/font/brandontext/brandontext-regular.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/font/brandontext/brandontext-regularitalic.woff2" as="font" type="font/woff2"
+          crossorigin>
+    <link rel="preload" href="/font/brandontext/brandontext-medium.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/font/brandontext/brandontext-mediumitalic.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/font/brandontext/brandontext-bold.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/font/brandontext/brandontext-bolditalic.woff2" as="font" type="font/woff2" crossorigin>
+    <!-- CSS -->
+    <link rel="stylesheet" media="all" href="/assets/intl-tel-input/intlTelInput.css"/>
+    <link rel="stylesheet" media="all" href="/assets/public.css"/>
+
+
+    <script src="assets/unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="assets/unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="assets/unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="assets/unpkg.com/history@5/umd/history.production.min.js" crossorigin></script>
+    <script src="assets/unpkg.com/react-router@6/umd/react-router.production.min.js" crossorigin></script>
+    <script src="assets/unpkg.com/react-router-dom@6/umd/react-router-dom.production.min.js" crossorigin></script>
+
+<!--    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>-->
+<!--    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>-->
+<!--    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>-->
+<!--    <script src="https://unpkg.com/history@5/umd/history.development.js" crossorigin></script>-->
+<!--    <script src="https://unpkg.com/react-router@6/umd/react-router.development.js" crossorigin></script>-->
+<!--    <script src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js" crossorigin></script>-->
+
+
+</head>
+<body id="content">
+
+<!--<header id="header" style="display: flex;justify-content: center;padding: 5px;">
+    <button className="btn btn-blue" style="width: 200px">roots</button>
+    <button className="btn btn-white" style="width: 200px">rootcasts</button>
+</header>-->
+<!-- End Google Tag Manager (noscript) -->
+
+<div></div>
+
+<script>
+    class Utils {
+        static searchKeywords(str, keywords) {
+            if (str === null || str === undefined) {
+                return false;
+            }
+            if (keywords === null || keywords === '') {
+                return true;
+            }
+            return str.toUpperCase().indexOf(keywords.toUpperCase()) > -1
+        }
+    }
+</script>
+
+<script type="text/babel">
+    const UserContext = React.createContext(null);
+
+
+    var Router = ReactRouterDOM.HashRouter;
+    // var Router = ReactRouterDOM.BrowserRouter;
+    var Routes = ReactRouterDOM.Routes;
+    var Route = ReactRouterDOM.Route;
+    var Navigate = ReactRouterDOM.Navigate;
+    var Link = ReactRouterDOM.Link;
+    var NavLink = ReactRouterDOM.NavLink;
+
+    class MyApp extends React.Component {
+        constructor(props) {
+            super(props);
+            this.state = {
+                roots: [],
+                rootcasts: [],
+                activeLink: 'roots',
+            };
+        }
+
+        componentWillMount() {
+            fetch("data.json").then(res => res.json()).then(data => {
+                this.setState(data)
+            })
+        }
+
+        render() {
+            return [
+                <style key="1">
+                    {
+                        `
+                        #header{
+                        display: flex;justify-content: center;padding: 5px;
+                        }
+                        #header button{
+                        width: 200px;
+                        }
+                        `
+                    }
+                </style>
+                ,
+
+
+                ,
+
+            <Router key="3">
+                <header id="header" key="2">
+                    <NavLink to="/roots" children={({ isActive })=><button className={"btn btn-"+(isActive?"blue":"white")}>roots</button>}></NavLink>
+                    <NavLink to="/rootcasts" children={({ isActive })=><button className={"btn btn-"+(isActive?"blue":"white")}>rootcasts</button>}></NavLink>
+                </header>
+
+                <Routes>
+                    <Route path="/" element={<Navigate to="/roots"/>}/>
+
+                    <Route path="/roots" element={<RootsPage items={this.state.roots}/>}/>
+                    <Route path="/roots/:root" element={<RootPage items={this.state.roots}/>}/>
+                    <Route path="/rootcasts" element={<RootcastsPage rootcasts={this.state.rootcasts}/>}/>
+                    <Route path="/rootcasts/:rootcast" element={<RootcastPage rootcasts={this.state.rootcasts}/>}/>
+                </Routes>
+            </Router>
+                ];
+        }
+    }
+
+
+    const container = document.getElementById('content');
+    const root = ReactDOM.createRoot(container);
+    root.render(<MyApp/>);
+</script>
+
+<script type="text/babel">
+    class RootsPage extends React.Component {
+        constructor(props) {
+            super(props);
+            this.state = {
+                items: [],
+                audioOnly: false,
+                commonOnly: false,
+                key: '',
+            };
+            this.search = this.search.bind(this);
+        }
+
+        search(event) {
+            console.log(event)
+            this.setState({key: event.target.value});
+        }
+
+        render() {
+            const items = this.props.items;
+            const {audioOnly, commonOnly, key} = this.state;
+            return <main id="main">
+                <section className="page-title">
+                    <div className="container">
+                        <h1>Word Roots</h1>
+                        <p>Learning about the building blocks of words can help you make sense of unfamiliar
+                            words.</p>
+                        <form id="roots-search-form">
+                            <div className="roots-search">
+                                <div className="roots-search-textfield">
+                                    <input type="search" id="search" placeholder="Search roots&hellip;"
+                                           onChange={this.search}/>
+                                </div>
+                                <div className="roots-search-checkbox">
+                                    <label htmlFor="audio-only">
+                                        <input type="checkbox" id="audio-only"
+                                               onChange={() => this.setState({audioOnly: !this.state.audioOnly})}/>
+                                        <span className="control-indicator" aria-hidden="true"></span>
+                                        <span className="control-label">Only show roots with rootcasts</span>
+                                    </label>
+                                    <label htmlFor="common-only">
+                                        <input type="checkbox" id="common-only"
+                                               onChange={() => this.setState({commonOnly: !this.state.commonOnly})}/>
+                                        <span className="control-indicator" aria-hidden="true"></span>
+                                        <span className="control-label">Only show common roots</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+                <section className="bg-lt-gray">
+                    <div className="roots container">
+                        {items
+                            .filter(item =>
+                                (key === '' || item.root.indexOf(key) > -1)
+                                && (!audioOnly || (audioOnly && item.hasAudio))
+                                && (!commonOnly || (commonOnly && item.common))
+                            )
+                            .map(item =>
+                                <div className="root" data-audio={item.hasAudio} data-common={item.common}
+                                     data-root={item.root} key={item.root}>
+                                    <a href={'#/roots/' + item.root}>
+                                        <h2>{item.title}</h2>
+                                        <p>{item.description}</p>
+                                    </a>
+                                </div>
+                            )}
+                    </div>
+                </section>
+            </main>;
+        }
+    }
+
+
+</script>
+<script type="text/babel">
+    function RootPage(props) {
+        let {root} = ReactRouterDOM.useParams();
+        let {items} = props;
+        const i = items.findIndex(item => item.root == root);
+        const content = i > -1 ? items[i].content : '';
+
+        return <div>
+            <div className="content" dangerouslySetInnerHTML={{__html: content}}></div>
+        </div>
+
+    }
+
+
+</script>
+<script type="text/babel">
+    class RootcastsPage extends React.Component {
+        constructor(props) {
+            super(props);
+            this.state = {
+                key: '',
+            };
+        }
+
+
+        render() {
+            const rootcasts = this.props.rootcasts;
+            const {key} = this.state;
+            return <main id="main">
+                <section className="page-title">
+                    <div className="container">
+                        <h1>Rootcasts</h1>
+                        <p>Learn how word parts combine to create English vocabulary.</p>
+                        <form id="roots-search-form">
+                            <div className="roots-search">
+                                <div className="roots-search-textfield">
+                                    <input type="search" id="search" placeholder="Search rootcasts&hellip;"
+                                           onChange={() => this.setState({key: event.target.value})}/>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+                <section className="bg-lt-gray">
+                    <div className="resources container">
+                        {rootcasts
+                            .filter(item => Utils.searchKeywords(item.title, key) || Utils.searchKeywords(item.subtitle, key)|| Utils.searchKeywords(item.description, key))
+                            .map(item =>
+                                <div className="resource" key={item.key}>
+                                    <div>
+                                        <h2>{item.title}</h2>
+                                        <p>{item.subtitle}</p>
+                                        <p className="content" dangerouslySetInnerHTML={{__html: item.description}}></p>
+                                    </div>
+                                    <div className="cta">
+                                        <a href={'#/rootcasts/' + item.key} className="btn btn-white btn-small">
+                                            View Rootcast
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+                    </div>
+                </section>
+            </main>;
+        }
+    }
+
+
+</script>
+
+<script type="text/babel">
+    function RootcastPage(props) {
+        let {rootcast} = ReactRouterDOM.useParams();
+        let {rootcasts} = props;
+        console.log("rootcasts", rootcasts)
+        const i = rootcasts.findIndex(item => item.key == rootcast);
+        const content = i > -1 ? rootcasts[i].content : '';
+
+        return <div>
+            <div className="content" dangerouslySetInnerHTML={{__html: content}}></div>
+        </div>
+
+    }
+
+
+</script>
+
+
+</body>
+</html>
