@@ -169,10 +169,7 @@
 
             const items = this.props.items
                 .filter(item =>
-                    (
-                        Utils.searchKeywords(item.title, this.state.key) ||
-                        Utils.searchKeywords(item.description, this.state.key)
-                    )
+                    Utils.searchKeywords(item.title, this.state.key)
                     && (!audioOnly || (audioOnly && item.hasAudio))
                     && (!commonOnly || (commonOnly && item.common))
                 );
