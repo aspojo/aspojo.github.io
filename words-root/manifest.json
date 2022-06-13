@@ -3,7 +3,7 @@
   "name": "通过词根学单词",
   "description": "通过词根学单词.",
   "short_name": "词根",
-  "start_url": "index.html#roots?source=pwa",
+  "start_url": "./#/roots?source=pwa",
   "scope": "/",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
