@@ -1,0 +1,37 @@
+{
+  "background_color": "#ffffff",
+  "description": "通过词根学单词.",
+  "display": "standalone",
+  "icons": [
+    {
+        "src": "icon/icon192.png",
+        "sizes": "192x192",
+        "type": "image/png",
+        "purpose": "any"
+    },
+    {
+        "src": "icon/icon196.png",
+        "sizes": "196x196",
+        "type": "image/png",
+        "purpose": "maskable"
+    },
+    {
+        "src": "icon/icon256.png",
+        "sizes": "256x256",
+        "type": "image/png",
+        "purpose": "any"
+    },
+    {
+        "src": "icon/icon512.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "any"
+    }
+],
+  "name": "通过词根学单词",
+  "prefer_related_applications": false,
+  "scope": "/",
+  "short_name": "词根",
+  "start_url": "/?source=pwa",
+  "theme_color": "#ffffff"
+}
