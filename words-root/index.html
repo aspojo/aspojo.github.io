@@ -177,7 +177,6 @@
         }
 
         search(event) {
-            console.log(event)
             this.setState({key: event.target.value});
         }
 
@@ -186,9 +185,16 @@
 
             const items = this.props.items
                 .filter(item =>
-                    Utils.searchKeywords(item.title, this.state.key)
-                    && (!audioOnly || (audioOnly && item.hasAudio))
-                    && (!commonOnly || (commonOnly && item.common))
+                        Utils.searchKeywords(item.title, this.state.key)
+                        || (
+                            item.title.length < this.state.key.length && (
+                                Utils.searchKeywords(this.state.content, this.state.key)
+                                ||
+                                Utils.searchKeywords(this.state.key, item.title)
+                            )
+                        )
+                        && (!audioOnly || (audioOnly && item.hasAudio))
+                        && (!commonOnly || (commonOnly && item.common))
                 );
             return <main id="main">
                 <section className="page-title">
