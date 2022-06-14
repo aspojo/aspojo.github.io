@@ -20,6 +20,16 @@
     <link rel="stylesheet" media="all" href="assets/intl-tel-input/intlTelInput.css"/>
     <link rel="stylesheet" media="all" href="assets/public.css"/>
 
+    <script type="module">
+        import {Workbox} from './third_party/workbox-v6.5.3/workbox-window.prod.mjs';
+
+        if ('serviceWorker' in navigator) {
+            const wb = new Workbox('sw.js');
+            wb.register();
+            const swVersion = await wb.messageSW({type: 'GET_VERSION'});
+            console.log('app version:', swVersion);
+        }
+    </script>
 
     <script src="assets/unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="assets/unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -27,7 +37,7 @@
     <script src="assets/unpkg.com/history@5/umd/history.production.min.js" crossorigin></script>
     <script src="assets/unpkg.com/react-router@6/umd/react-router.production.min.js" crossorigin></script>
     <script src="assets/unpkg.com/react-router-dom@6/umd/react-router-dom.production.min.js" crossorigin></script>
-    <script src="assets/jszip.min.js" ></script>
+    <script src="assets/jszip.min.js"></script>
 
     <!--    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>-->
     <!--    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>-->
@@ -89,15 +99,22 @@
         }
 
         componentWillMount() {
-            fetch("data.zip").then(res => res.blob())
-                .then(JSZip.loadAsync)                            // 3) chain with the zip promise
-                .then(function (zip) {
-                    return zip.file("data.json").async("string"); // 4) chain with the text content promise
-                })
-                .then(JSON.parse)
+            let st = Date.now();
+            // fetch("data.js").then(res => res.blob())
+            //     .then(JSZip.loadAsync)                            // 3) chain with the zip promise
+            //     .then(function (zip) {
+            //         return zip.file("data.json").async("string"); // 4) chain with the text content promise
+            //     })
+            //     .then(JSON.parse)
+            //     .then(data => {
+            //         alert(Date.now() - st);
+            //         this.setState(data);
+            //     })
+            fetch("data.json").then(res => res.json())
                 .then(data => {
-                this.setState(data);
-            })
+                    // alert(Date.now() - st);
+                    this.setState(data);
+                })
         }
 
         render() {
