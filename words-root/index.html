@@ -73,8 +73,9 @@
             }
             return str.toUpperCase().indexOf(this.simplifyKeywords(keywords.toUpperCase())) > -1
         }
-        static simplifyKeywords(keywords){
-            return keywords.replaceAll(/[- ]*/ig,"")
+
+        static simplifyKeywords(keywords) {
+            return keywords.replaceAll(/[- ]*/ig, "")
         }
     }
 </script>
@@ -98,6 +99,7 @@
                 roots: [],
                 rootcasts: [],
                 activeLink: 'roots',
+                myRoots: []
             };
         }
 
@@ -117,7 +119,12 @@
                 .then(data => {
                     // alert(Date.now() - st);
                     this.setState(data);
-                })
+                });
+            fetch("myRoots.json").then(res => res.json())
+                .then(data => {
+                    // alert(Date.now() - st);
+                    this.setState(data);
+                });
         }
 
         render() {
@@ -150,7 +157,8 @@
                     <Routes>
                         <Route path="/" element={<Navigate to="/roots"/>}/>
 
-                        <Route path="/roots" element={<RootsPage items={this.state.roots}/>}/>
+                        <Route path="/roots"
+                               element={<RootsPage items={this.state.roots} myRoots={this.state.myRoots}/>}/>
                         <Route path="/roots/:root" element={<RootPage items={this.state.roots}/>}/>
                         <Route path="/rootcasts" element={<RootcastsPage rootcasts={this.state.rootcasts}/>}/>
                         <Route path="/rootcasts/:rootcast" element={<RootcastPage rootcasts={this.state.rootcasts}/>}/>
@@ -175,6 +183,7 @@
                 audioOnly: false,
                 commonOnly: false,
                 wordOnly: true,
+                myRootsOnly: false,
                 key: '',
             };
             this.search = this.search.bind(this);
@@ -185,21 +194,22 @@
         }
 
         render() {
-            const {audioOnly, commonOnly} = this.state;
-
+            const {audioOnly, commonOnly, myRootsOnly} = this.state;
+            const myRoots = this.props.myRoots;
             const items = this.props.items
                 .filter(item =>
-                        Utils.searchKeywords(item.title, this.state.key)
+                    (Utils.searchKeywords(item.title, this.state.key)
                         || (
                             item.title.length <= this.state.key.length && (
                                 // 只找 usage 的词条
-                                Utils.searchKeywords(item.content, "h3>"+this.state.key)
+                                Utils.searchKeywords(item.content, "h3>" + this.state.key)
                                 ||
                                 (Utils.searchKeywords(this.state.key, item.title) && !this.state.wordOnly)
                             )
-                        )
-                        && (!audioOnly || (audioOnly && item.hasAudio))
-                        && (!commonOnly || (commonOnly && item.common))
+                        ))
+                    && (!audioOnly || (audioOnly && item.hasAudio))
+                    && (!commonOnly || (commonOnly && item.common))
+                    && (!myRootsOnly || (myRootsOnly && myRoots.indexOf(item.title) > -1))
                 );
             return <main id="main">
                 <section className="page-title">
@@ -228,9 +238,17 @@
                                     </label>
                                     <label htmlFor="word-only">
                                         <input type="checkbox" id="word-only"
-                                               onChange={() => this.setState({wordOnly: !this.state.wordOnly})} checked={this.state.wordOnly}/>
+                                               onChange={() => this.setState({wordOnly: !this.state.wordOnly})}
+                                               checked={this.state.wordOnly}/>
                                         <span className="control-indicator" aria-hidden="true"></span>
                                         <span className="control-label">Only show roots contains the word</span>
+                                    </label>
+                                    <label htmlFor="my-roots-only">
+                                        <input type="checkbox" id="my-roots-only"
+                                               onChange={() => this.setState({myRootsOnly: !this.state.myRootsOnly})}
+                                               checked={this.state.myRootsOnly}/>
+                                        <span className="control-indicator" aria-hidden="true"></span>
+                                        <span className="control-label">Only show my roots</span>
                                     </label>
                                 </div>
                             </div>
