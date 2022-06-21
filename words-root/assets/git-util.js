@@ -1,16 +1,18 @@
 import {Octokit} from "https://cdn.skypack.dev/octokit";
 
-const auth = "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";
+let auth;
 const owner = 'aspojo';
 const repo = "aspojo.github.io";
 
-const octokit = new Octokit({auth})
+let octokit
 let path;
 let file_sha;
 let user;
 
 async function getMyConfig(_user) {
-    user = _user;
+    const arr = _user.split("__");
+    user =arr[0];
+    octokit = new Octokit({auth:arr[1]})
     await refreshSha();
     console.log("file_sha", file_sha);
     const fileContent = await octokit.request('GET /repos/{owner}/{repo}/git/blobs/{file_sha}', {
@@ -64,7 +66,7 @@ async function refreshSha() {
         file_sha = obj.data.sha
     } catch (e) {
         if (e.response.data.message === "Not Found") {
-           await createMyConfig({});
+            await createMyConfig({});
         }
     }
 
