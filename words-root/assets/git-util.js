@@ -1,6 +1,6 @@
 import {Octokit} from "https://cdn.skypack.dev/octokit";
 
-const auth = "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";
+const auth = "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";
 const owner = 'aspojo';
 const repo = "aspojo.github.io";
 
