@@ -19,6 +19,7 @@
     <!-- CSS -->
     <link rel="stylesheet" media="all" href="assets/intl-tel-input/intlTelInput.css"/>
     <link rel="stylesheet" media="all" href="assets/public.css"/>
+    <link rel="stylesheet" media="all" href="style.css"/>
 
     <script type="module">
         import {Workbox} from './third_party/workbox-v6.5.3/workbox-window.prod.mjs';
@@ -38,38 +39,17 @@
     <script src="assets/unpkg.com/react-router@6/umd/react-router.production.min.js" crossorigin></script>
     <script src="assets/unpkg.com/react-router-dom@6/umd/react-router-dom.production.min.js" crossorigin></script>
     <script src="assets/jszip.min.js"></script>
-    <script type="module">
-        import { Octokit, App } from "https://cdn.skypack.dev/octokit";
-        let octokit = new Octokit({
-            auth: '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'
-        })
+    <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
 
-        let obj = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-            owner: 'aspojo',
-            repo: 'ngrok-ddns',
-            path: 'conf.properties'
-        })
-        console.log("ref",obj);
-
-        const sha  = obj.data.sha
-        console.log("sha",sha);
-
-        octokit = new Octokit({
-            auth: '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'
-        })
-        const fileContent = await octokit.request('GET /repos/{owner}/{repo}/git/blobs/{file_sha}', {
-            owner: 'aspojo',
-            repo: 'ngrok-ddns',
-            file_sha: sha
-        })
-        console.log("fileContent",fileContent);
-    </script>
     <!--    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>-->
     <!--    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>-->
     <!--    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>-->
     <!--    <script src="https://unpkg.com/history@5/umd/history.development.js" crossorigin></script>-->
     <!--    <script src="https://unpkg.com/react-router@6/umd/react-router.development.js" crossorigin></script>-->
     <!--    <script src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js" crossorigin></script>-->
+
+
+    <script type="module" src="git-util.js"></script>
 
     <style>
         .usage-list li h3:after {
@@ -126,9 +106,15 @@
                 activeLink: 'roots',
                 myRoots: []
             };
+            this.setMyRoots = this.setMyRoots.bind(this)
+
         }
 
-        componentWillMount() {
+        setMyRoots(data) {
+            this.setState(data)
+        }
+
+        async componentWillMount() {
             let st = Date.now();
             // fetch("data.js").then(res => res.blob())
             //     .then(JSZip.loadAsync)                            // 3) chain with the zip promise
@@ -150,14 +136,17 @@
             //         // alert(Date.now() - st);
             //         this.setState(data);
             //     });
-            fetch("https://api.jsonbin.io/v3/b/"+location.search.substr(1),{headers:{
-                    'X-Master-Key': '$2b$10$A0vdOSKrJU2XeHg49W2MS.ENUGgOe8EjAs9HarxKXolrehp10bk22',
-                    'X-Access-Key':'$2b$10$BD2cgBird6VGX0DhEz/.r.qH8LNltPA.pqE6RPYIKIR6gBumM.Gja'
-                }}).then(res => res.json())
-                .then(data => {
-                    // alert(Date.now() - st);
-                    this.setState(data.record);
-                });
+            // fetch("https://api.jsonbin.io/v3/b/" + location.search.substr(1), {
+            //     headers: {
+            //         'X-Master-Key': '$2b$10$A0vdOSKrJU2XeHg49W2MS.ENUGgOe8EjAs9HarxKXolrehp10bk22',
+            //         'X-Access-Key': '$2b$10$BD2cgBird6VGX0DhEz/.r.qH8LNltPA.pqE6RPYIKIR6gBumM.Gja'
+            //     }
+            // }).then(res => res.json())
+            //     .then(data => {
+            //         // alert(Date.now() - st);
+            //         this.setState(data.record);
+            //     });
+            // this.setState(await getMyConfig());
         }
 
         render() {
@@ -173,12 +162,7 @@
                         }
                         `
                     }
-                </style>
-                ,
-
-
-                ,
-
+                </style>,
                 <Router key="3">
                     <header id="header" key="2">
                         <NavLink to="/roots" children={({isActive}) => <button
@@ -188,11 +172,13 @@
                     </header>
 
                     <Routes>
+                        <Route path="/user/:user" element={<User setMyRoots={this.setMyRoots}/>}/>
                         <Route path="/" element={<Navigate to="/roots"/>}/>
 
                         <Route path="/roots"
                                element={<RootsPage items={this.state.roots} myRoots={this.state.myRoots}/>}/>
-                        <Route path="/roots/:root" element={<RootPage items={this.state.roots}/>}/>
+                        <Route path="/roots/:root"
+                               element={<RootPage items={this.state.roots} myRoots={this.state.myRoots}/>}/>
                         <Route path="/rootcasts" element={<RootcastsPage rootcasts={this.state.rootcasts}/>}/>
                         <Route path="/rootcasts/:rootcast" element={<RootcastPage rootcasts={this.state.rootcasts}/>}/>
                     </Routes>
@@ -206,6 +192,16 @@
     const root = ReactDOM.createRoot(container);
     root.render(<MyApp/>);
 </script>
+<script type="text/babel">
+    const Navigate = ReactRouterDOM.Navigate;
+
+    function User(props) {
+        let {user} = ReactRouterDOM.useParams();
+        getMyConfig(user).then(data => props.setMyRoots(data));
+        return <Navigate to="/roots"/>;
+    }
+</script>
+
 
 <script type="text/babel">
     class RootsPage extends React.Component {
@@ -242,7 +238,7 @@
                         ))
                     && (!audioOnly || (audioOnly && item.hasAudio))
                     && (!commonOnly || (commonOnly && item.common))
-                    && (!myRootsOnly || (myRootsOnly && myRoots.indexOf(item.title) > -1))
+                    && (!myRootsOnly || (myRootsOnly && myRoots.indexOf(item.key) > -1))
                 );
             return <main id="main">
                 <section className="page-title">
@@ -311,9 +307,29 @@
 <script type="text/babel">
     function RootPage(props) {
         let {root} = ReactRouterDOM.useParams();
-        let {items} = props;
+        let {items, myRoots} = props;
         const i = items.findIndex(item => item.key == root);
         const content = i > -1 ? items[i].content : '';
+
+        const starHandler = React.useCallback(event => {
+            const hasStar = $(event.target).hasClass("icon-star-on");
+            let msg;
+            if (hasStar) {
+                myRoots.splice(myRoots.indexOf(root), 1);
+                msg = "off"
+
+            } else {
+                myRoots.push(root);
+                msg = "on"
+            }
+            saveMyConfig({myRoots}, msg + " " + root).then((d) => {
+                console.log("update ", d);
+                $(event.target).removeClass("icon-star-on");
+                $(event.target).removeClass("icon-star-off");
+                $(event.target).addClass("icon-star-" + msg);
+            })
+        }, []);
+
         React.useEffect(() => {
             const usageList = document.getElementsByClassName("usage-list");
             if (usageList.length > 0) {
@@ -323,7 +339,14 @@
                     p.innerText = ": " + p.innerText;
                 }
             }
-        });
+            const title = document.getElementsByClassName("page-title");
+            if (title.length > 0) {
+                const span = document.createElement("span");
+                span.setAttribute("class", "icon icon-star-"+(myRoots.indexOf(root)>-1?'on':'off'));
+                span.addEventListener("click", starHandler)
+                title[0].getElementsByTagName("h1")[0].appendChild(span);
+            }
+        }, [starHandler]);
         return <div>
             <div className="content" dangerouslySetInnerHTML={{__html: content}}></div>
         </div>
