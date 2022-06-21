@@ -1,6 +1,6 @@
 import {Octokit} from "https://cdn.skypack.dev/octokit";
 
-const auth = "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";
+const auth = "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";
 const owner = 'aspojo';
 const repo = "aspojo.github.io";
 
@@ -36,7 +36,7 @@ async function createMyConfig(json) {
         },
         content: btoa(JSON.stringify(json))
     });
-    refreshSha();
+    await refreshSha();
 }
 
 
