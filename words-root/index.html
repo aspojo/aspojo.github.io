@@ -10,12 +10,12 @@
 
     <base href="./">
     <!-- Fonts -->
-    <link rel="preload" href="font/brandontext/brandontext-regular.woff2" as="font" type="font/woff2" crossorigin>
+<!--    <link rel="preload" href="font/brandontext/brandontext-regular.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="font/brandontext/brandontext-regularitalic.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="font/brandontext/brandontext-medium.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="font/brandontext/brandontext-mediumitalic.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="font/brandontext/brandontext-bold.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="font/brandontext/brandontext-bolditalic.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="font/brandontext/brandontext-bolditalic.woff2" as="font" type="font/woff2" crossorigin>-->
     <!-- CSS -->
     <link rel="stylesheet" media="all" href="assets/intl-tel-input/intlTelInput.css"/>
     <link rel="stylesheet" media="all" href="assets/public.css"/>
@@ -32,14 +32,15 @@
         }
     </script>
 
-    <script src="assets/unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="assets/unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="assets/unpkg.com/babel-standalone@6/babel.min.js"></script>
-    <script src="assets/unpkg.com/history@5/umd/history.production.min.js" crossorigin></script>
-    <script src="assets/unpkg.com/react-router@6/umd/react-router.production.min.js" crossorigin></script>
-    <script src="assets/unpkg.com/react-router-dom@6/umd/react-router-dom.production.min.js" crossorigin></script>
-    <script src="assets/jszip.min.js"></script>
-    <script src="assets/jquery.min.js"></script>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.0.0-beta.3/babel.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/history/5.3.0/history.production.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/react-router/6.3.0/react-router.production.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/react-router-dom/6.3.0/react-router-dom.production.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.slim.min.js"></script>
 
     <!--    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>-->
     <!--    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>-->
@@ -48,7 +49,6 @@
     <!--    <script src="https://unpkg.com/react-router@6/umd/react-router.development.js" crossorigin></script>-->
     <!--    <script src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js" crossorigin></script>-->
 
-    <script src="assets/octokit-rest.min.js"></script>
     <script type="module" src="assets/git-util.js"></script>
 
 
@@ -87,6 +87,7 @@
 </script>
 
 <script type="text/babel">
+
     const UserContext = React.createContext(null);
 
 
@@ -117,21 +118,21 @@
 
         async componentWillMount() {
             let st = Date.now();
-            // fetch("data.js").then(res => res.blob())
-            //     .then(JSZip.loadAsync)                            // 3) chain with the zip promise
-            //     .then(function (zip) {
-            //         return zip.file("data.json").async("string"); // 4) chain with the text content promise
-            //     })
-            //     .then(JSON.parse)
-            //     .then(data => {
-            //         alert(Date.now() - st);
-            //         this.setState(data);
-            //     })
-            fetch("data.json").then(res => res.json())
+            fetch("data.js").then(res => res.blob())
+                .then(JSZip.loadAsync)                            // 3) chain with the zip promise
+                .then(function (zip) {
+                    return zip.file("data.json").async("string"); // 4) chain with the text content promise
+                })
+                .then(JSON.parse)
                 .then(data => {
-                    // alert(Date.now() - st);
+                    console.log("unzip spend time : ", Date.now() - st);
                     this.setState(data);
-                });
+                })
+            // fetch("data.json").then(res => res.json())
+            //     .then(data => {
+            //         // alert(Date.now() - st);
+            //         this.setState(data);
+            //     });
             // fetch("myRoots.json").then(res => res.json())
             //     .then(data => {
             //         // alert(Date.now() - st);
@@ -214,6 +215,7 @@
                 commonOnly: false,
                 wordOnly: true,
                 myRootsOnly: false,
+                inRandomOrder: true,
                 key: '',
             };
             this.search = this.search.bind(this);
@@ -227,6 +229,8 @@
             const {audioOnly, commonOnly, myRootsOnly} = this.state;
             const myRoots = this.props.myRoots;
             const items = this.props.items
+                .map(item=>item)
+                .sort((a,b)=>this.state.inRandomOrder?Math.random()-0.5:1)
                 .filter(item =>
                     (Utils.searchKeywords(item.title, this.state.key)
                         || (
@@ -279,6 +283,13 @@
                                                checked={this.state.myRootsOnly}/>
                                         <span className="control-indicator" aria-hidden="true"></span>
                                         <span className="control-label">Only show my roots</span>
+                                    </label>
+                                    <label htmlFor="in-random-order">
+                                        <input type="checkbox" id="in-random-order"
+                                               onChange={() => this.setState({inRandomOrder: !this.state.inRandomOrder})}
+                                               checked={this.state.inRandomOrder}/>
+                                        <span className="control-indicator" aria-hidden="true"></span>
+                                        <span className="control-label">show roots in random order</span>
                                     </label>
                                 </div>
                             </div>
