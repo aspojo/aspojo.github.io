@@ -251,7 +251,7 @@
                         <h1>Word Roots</h1>
                         <p>Learning about the building blocks of words can help you make sense of unfamiliar
                             words.</p>
-                        <form id="roots-search-form" onKeyDown={(event) => event.key != 'Enter'}>
+                        <form id="roots-search-form" onSubmit={(event) => event.preventDefault()}>
                             <div className="roots-search">
                                 <div className="roots-search-textfield">
                                     <input type="input" id="search" placeholder="Search roots&hellip;"
@@ -390,7 +390,7 @@
                     <div className="container">
                         <h1>Rootcasts</h1>
                         <p>Learn how word parts combine to create English vocabulary.</p>
-                        <form id="roots-search-form" onKeyDown={(event) => event.key != 'Enter'}>
+                        <form id="roots-search-form" onSubmit={(event) => event.preventDefault()}>
                             <div className="roots-search">
                                 <div className="roots-search-textfield">
                                     <input type="iput" id="search" placeholder="Search rootcasts&hellip;"
