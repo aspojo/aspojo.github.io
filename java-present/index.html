@@ -1,0 +1,297 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>reveal.js</title>
+
+    <link rel="stylesheet" href="dist/reset.css">
+    <link rel="stylesheet" href="dist/reveal.css">
+    <link rel="stylesheet" href="dist/theme/black.css">
+
+    <!-- Theme used for syntax highlighted code -->
+    <link rel="stylesheet" href="plugin/highlight/monokai.css">
+</head>
+<body>
+<div class="reveal">
+    <div class="slides">
+        <section>
+            <h1 style="color: #e7ad52">JAVA技术分享</h1>
+            <h3>介绍一套小而美的提高开发效率的工具包</h3>
+            <p>
+                <small>创建人：<a href="http://logbug.top">elvis</a> </small>
+            </p>
+        </section>
+        <section style="text-align: left;">
+                <p>- 店号拦截器</p>
+                <p>- Dozer和lombok</p>
+                <p>- Mybatisplus-plus</p>
+                <p>- 糊涂包</p>
+        </section>
+
+
+        <section data-background-gradient="linear-gradient(to bottom, #283b95, #17b2c3)">
+            <section>
+                <h2>店号拦截器</h2>
+                <p>store-no-interceptor-starter</p>
+            </section>
+            <section id="fragments">
+                <h3>为什么需要店号拦截器？</h3>
+
+                <ul class="fragment">
+                    <li>
+                        <span style="vertical-align:middle; padding-right: 30px;"><img src="assert/shock-face.jpg" width="100"></span>删掉了不该删的数据？
+                    </li>
+                    <li>
+                        <span style="vertical-align:middle; padding-right: 30px;"><img src="assert/confuse-face.jpg" width="100"></span>数据被莫名其妙的修改了？
+                    </li>
+
+                </ul>
+
+                <p class="fragment fade-down">你可能需要一个店号拦截器，它能帮你拦截所有漏掉店号的DML语句<br>（目前包含：update,delete）</p>
+            </section>
+
+            <section>
+
+                <div class="r-hstack justify-center">
+                    <div data-auto-animate-delay="0">
+                        <h3>店号拦截器的使用</h3>
+                        <ol>
+                            <li>引入pom依赖</li>
+                            <li>配置拦截规则</li>
+                        </ol>
+                        <p><small>默认根据分库分表的策略进行拦截，<br>一般情况下使用默认配置即可。</small></p>
+                    </div>
+                    <div data-id="box2" data-auto-animate-delay="0">
+
+                        <pre data-id="code-animation" style="width: 600px; ">
+                        <code class="language-java hljs" data-trim data-line-numbers>
+StoreNoInterceptorProperties {
+    boolean enabled=true;
+    // 兼容不同店号字段名称
+    String fieldName="store_no";
+    // 被排除的表一定不拦截
+    String excludeTables="";
+    // 拦截范围
+    String tables="";
+}
+                        </code>
+					    </pre>
+                    </div>
+                </div>
+            </section>
+        </section>
+
+
+        <section data-auto-animate data-background="#4d7e65" data-auto-animate-easing="cubic-bezier(0.770, 0.000, 0.175, 1.000)">
+            <section>
+                <h2>Dozer和lombok</h2>
+                <p>小而美的工具</p>
+            </section>
+            <section data-auto-animate>
+                <div class="r-hstack justify-center">
+                    <div data-id="box1" data-auto-animate-delay="0">
+                        <h3 data-id="code-title">通常的做法</h3>
+                        <pre data-id="code-animation" style="">
+                        <code class="language-java hljs" data-trim data-line-numbers>
+                        class MyService{
+                          void fun(){
+                            Task newTask = new Task();
+                            newTask.setA(oldTask.getA());
+                            newTask.setB(oldTask.getB());
+                            newTask.setC(oldTask.getC());
+                            newTask.setD(oldTask.getD());
+                            newTask.setE(oldTask.getE());
+                            newTask.setF(oldTask.getF());
+                            newTask.setG(oldTask.getG());
+                            newTask.setH(oldTask.getH());
+                            newTask.setCreateTime(date);
+                            ...
+                        </code>
+					</pre>
+                        <p>根据原有数据生成新数据，并修改部分属性</p>
+                    </div>
+                </div>
+            </section>
+            <section data-auto-animate >
+                <div class="r-hstack justify-center">
+
+                    <div data-id="box1" data-auto-animate-delay="0">
+                        <h3 data-id="code-title">添加dozer</h3>
+                        <pre data-id="code-animation">
+                        <code class="language-java hljs" data-trim data-line-numbers="3,4">
+class MyService{
+
+    static Mapper dozerMapper
+     = DozerBeanMapperBuilder.buildDefault();
+
+    void fun(){
+                        </code>
+					</pre>
+                        <p>在服务类中构建默认实例：dozerMapper</p>
+                    </div>
+
+                    <div data-id="box2" data-auto-animate-delay="0">
+                        <h3 data-id="code-title">添加lombok</h3>
+                        <pre data-id="code-animation">
+                        <code class="language-java hljs" data-trim data-line-numbers="1,2">
+@Data
+@Accessors(chain = true)
+class Task{
+...
+
+}
+                        </code>
+					</pre>
+                        <p>向Task添加注解: @Data、@Accessors</p>
+                    </div>
+
+                </div>
+            </section>
+            <section data-auto-animate>
+                <div class="r-stack">
+                    <div data-id="box1" data-auto-animate-delay="0">
+                        <h3 data-id="code-title">升级后的做法</h3>
+                        <pre data-id="code-animation" style="width: 1000px;">
+                        <code class="language-java hljs" data-trim data-line-numbers="5">
+class MyService{
+    static Mapper dozerMapper = DozerBeanMapperBuilder.buildDefault();
+
+  void fun(){
+    Task newTask = dozerMapper.map(oldTask, Task.class).setCreateTime(date);
+    ...
+                        </code>
+					</pre>
+                        <p>使用一行代码即可同时实现<br>对原有数据的拷贝和对新对象赋值的操作</p>
+                    </div>
+                    <div data-id="box2" data-auto-animate-delay="0">
+                        <h3 data-id="code-title">升级后的做法</h3>
+                        <pre data-id="code-animation" style="width: 1000px;">
+                        <code class="language-java hljs" data-trim data-line-numbers="5">
+class MyService{
+    static Mapper dozerMapper = DozerBeanMapperBuilder.buildDefault();
+
+  void fun(){
+    Task newTask = dozerMapper.map(oldTask, Task.class).setCreateTime(date);
+    ...
+                        </code>
+					</pre>
+                        <p>使用一行代码即可同时实现<br>对原有数据的拷贝和对新对象赋值的操作</p>
+                    </div>
+
+
+                </div>
+            </section>
+
+        </section>
+
+
+        <section data-transition="slide" data-background="#b5533c" data-background-transition="zoom">
+            <section>
+                <h2>Mybatisplus-plus</h2>
+                <p>mybatis-plus功能的扩充</p>
+            </section>
+            <section>
+                <h3>更新task的状态为已完成</h3>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers="4">
+taskService.lambdaUpdate()
+    .eq(Task::getStoreNo, task.getStoreNo())
+    .eq(Task::getTaskId, task.getTaskId())
+    .set(Task::getStatus, 1)
+    .update();
+                    </code>
+                    </pre>
+            </section>
+            <section>
+                <h3>使用mpp</h3>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers="8">
+Task {
+    @MppMultiId
+    private Integer storeNo;
+    @MppMultiId
+    private String taskId;
+}
+                        ...
+taskService.updateByMultiId(task.setStatus(0));
+                    </code>
+                    </pre>
+                <p><small>MPP 根据实体类中定义的联合主键更新数据</small></p>
+            </section>
+        </section>
+
+        <section data-transition="slide" data-background="#aaaaaa" data-background-transition="zoom">
+            <section>
+                <h2>糊涂包</h2>
+                <p>Hutool-小而美</p>
+            </section>
+            <section>
+                <h3>字符串判空</h3>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers="8">
+StrUtil.isEmpty(str)
+                    </code>
+                    </pre>
+            </section>
+            <section>
+                <h3>集合判空</h3>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers="8">
+CollectionUtil.isEmpty(someCollection)
+                    </code>
+                    </pre>
+            </section>
+            <section>
+                <h3>唯一ID</h3>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers="8">
+static Snowflake snowflake = IdUtil.getSnowflake();
+                        。。。
+String id = snowflake.getSnowflakeNextIdStr();
+                    </code>
+                    </pre>
+            </section>
+        </section>
+        <section data-transition="slide" data-background="#ffffff" data-background-transition="zoom" style="text-align: left;">
+            <h1>感谢观看！</h1>
+        </section>
+    </div>
+</div>
+<div id="timer" style="position: fixed;left: 10px;bottom: 10px;height: 30px;width: 100px;color: white"></div>
+<script src="dist/reveal.js"></script>
+<script src="plugin/zoom/zoom.js"></script>
+<script src="plugin/notes/notes.js"></script>
+<script src="plugin/search/search.js"></script>
+<script src="plugin/markdown/markdown.js"></script>
+<script src="plugin/highlight/highlight.js"></script>
+<script>
+    // More info about initialization & config:
+    // - https://revealjs.com/initialization/
+    // - https://revealjs.com/config/
+
+    Reveal.initialize({
+        width: 1366,
+        controls: true,
+        progress: true,
+        center: true,
+        hash: true,
+
+        // Learn about plugins: https://revealjs.com/plugins/
+        plugins: [RevealZoom, RevealNotes, RevealSearch, RevealMarkdown, RevealHighlight]
+    });
+    let s = -1;
+    Reveal.on('slidechanged', event => {
+        if (s === -1 && event.indexh === 1) {
+            s = new Date().getTime();
+            setInterval(() => {
+                const t = new Date().getTime() - s;
+                document.getElementById("timer").innerHTML = (Math.floor(t / 60000)) + ":" + Math.floor(t / 1000 % 60);
+            }, 1000)
+
+        }
+    });
+</script>
+</body>
+</html>

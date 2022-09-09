@@ -25,6 +25,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/words-root',
             home: './words-root/'
         },
+        {
+            name: 'java-present',
+            desc: 'java-presentt',
+            src: 'https://github.com/aspojo/reveal.js/tree/java%E6%8A%80%E6%9C%AF%E5%88%86%E4%BA%AB',
+            home: './java-present/'
+        },
 
     ];
 
