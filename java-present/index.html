@@ -4,7 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-    <title>reveal.js</title>
+    <title>JAVA小工具分享</title>
+    <comment>
+        1. 守护数据安全的“店号拦截器”
+        2. 一系列能够简化代码、提升开发效率，同时“小而美”的工具包
+    </comment>
 
     <link rel="stylesheet" href="dist/reset.css">
     <link rel="stylesheet" href="dist/reveal.css">
@@ -17,17 +21,17 @@
 <div class="reveal">
     <div class="slides">
         <section>
-            <h1 style="color: #e7ad52">JAVA技术分享</h1>
-            <h3>介绍一套小而美的提高开发效率的工具包</h3>
+            <h1 style="color: #e7ad52">JAVA小工具分享</h1>
+            <h6>一系列日常工作中有助于提升开发效率的java工具包</h6>
             <p>
                 <small>创建人：<a href="http://logbug.top">elvis</a> </small>
             </p>
         </section>
         <section style="text-align: left;">
-                <p>- 店号拦截器</p>
-                <p>- Dozer和lombok</p>
-                <p>- Mybatisplus-plus</p>
-                <p>- 糊涂包</p>
+            <p>- 店号拦截器</p>
+            <p>- Dozer和lombok</p>
+            <p>- Mybatisplus-plus</p>
+            <p>- 糊涂包</p>
         </section>
 
 
@@ -80,6 +84,38 @@ StoreNoInterceptorProperties {
 					    </pre>
                     </div>
                 </div>
+            </section>
+
+            <section>
+
+                <h3>店号拦截器的效果</h3>
+
+                <div data-auto-animate-delay="0">
+                        <pre data-id="code-animation" >
+                        <code class="language-java hljs" data-trim data-line-numbers="2">
+        taskInfoService.lambdaUpdate()
+                .eq(Task::getTaskId,"1")
+                .set(Task::getCreateTime, new Date())
+                .update();
+
+                        </code>
+					    </pre>
+                </div>
+                <div data-id="box2" data-auto-animate-delay="0">
+
+                        <pre data-id="code-animation" >
+                        <code class="language-java hljs" data-trim data-line-numbers>
+org.mybatis.spring.MyBatisSystemException: nested exception is org.apache.ibatis.exceptions.PersistenceException:
+### Error updating database.  Cause: com.rtmart.sni.StoreNoInterceptorException: 请修改sql，不允许不带店号(store_no)的DML语句执行！！！ --> UPDATE revert_task_info  SET create_time=?
+
+ WHERE (task_id = ?)
+### Cause: com.rtmart.sni.StoreNoInterceptorException: 请修改sql，不允许不带店号(store_no)的DML语句执行！！！ --> UPDATE revert_task_info  SET create_time=?
+
+ WHERE (task_id = ?)
+                        </code>
+					    </pre>
+                </div>
+                <p>在不带店号的情况下执行更新语句时，系统会抛出异常，拒绝执行。</p>
             </section>
         </section>
 
@@ -228,28 +264,78 @@ taskService.updateByMultiId(task.setStatus(0));
                 <p>Hutool-想你所想</p>
             </section>
             <section>
-                <h3>字符串判空</h3>
+                <h3>日期时间工具</h3>
+                <p>DateUtil</p>
                 <pre data-id="code-animation">
-                    <code class="language-java hljs" data-trim data-line-numbers="8">
+                    <code class="language-java hljs" data-trim data-line-numbers>
+//当前时间
+Date date = DateUtil.date();
+//当前时间字符串，格式：yyyy-MM-dd HH:mm:ss
+String now = DateUtil.now();
+//当前日期字符串，格式：yyyy-MM-dd
+String today= DateUtil.today();
+//昨天
+DateUtil.yesterday()
+//明天
+DateUtil.tomorrow()
+                    </code>
+                    </pre>
+            </section>
+            <section>
+                <h3>字符串工具</h3>
+                <p>StrUtil</p>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers>
 StrUtil.isEmpty(str)
+String fileName = StrUtil.removeSuffix("pretty_girl.jpg", ".jpg")  //fileName -> pretty_girl
+String str = "abcdefgh";
+String strSub1 = StrUtil.sub(str, 2, 3); //strSub1 -> c
+String strSub2 = StrUtil.sub(str, 2, -3); //strSub2 -> cde
+String strSub3 = StrUtil.sub(str, 3, 2); //strSub2 -> c
                     </code>
                     </pre>
             </section>
             <section>
-                <h3>集合判空</h3>
+                <h3>集合工具</h3>
+                <p>CollUtil</p>
                 <pre data-id="code-animation">
-                    <code class="language-java hljs" data-trim data-line-numbers="8">
-CollectionUtil.isEmpty(someCollection)
+                    <code class="language-java hljs" data-trim data-line-numbers>
+List list = new LinkedList();
+CollUtil.size(list);
+CollUtil.isEmpty(list);
+CollUtil.isNotEmpty(list);
+CollUtil.toList("a", "b");
+CollUtil.toMap(new String[][]{{"k1", "v1"}, {"k2", "v2"}});
                     </code>
                     </pre>
             </section>
             <section>
-                <h3>唯一ID</h3>
+                <h3>编码解码</h3>
+                <p>Base64</p>
                 <pre data-id="code-animation">
-                    <code class="language-java hljs" data-trim data-line-numbers="8">
-static Snowflake snowflake = IdUtil.getSnowflake();
-                        。。。
-String id = snowflake.getSnowflakeNextIdStr();
+                    <code class="language-java hljs" data-trim data-line-numbers>
+String a = "伦家是一个非常长的字符串";
+//5Lym5a625piv5LiA5Liq6Z2e5bi46ZW/55qE5a2X56ym5Liy
+String encode = Base64.encode(a);
+
+// 还原为a
+String decodeStr = Base64.decodeStr(encode);
+                    </code>
+                    </pre>
+            </section>
+            <section>
+                <h3>唯一ID工具</h3>
+                <p>IdUtil</p>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers>
+//参数1为终端ID
+//参数2为数据中心ID
+Snowflake snowflake = IdUtil.getSnowflake(1, 1);
+long id = snowflake.nextId();
+
+//简单使用
+long id = IdUtil.getSnowflake().nextId();
+String id = IdUtil.getSnowflake().nextIdStr();
                     </code>
                     </pre>
             </section>
