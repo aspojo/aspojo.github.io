@@ -261,6 +261,20 @@ taskService.updateByMultiId(task.setStatus(0));
                 <p>Hutool-想你所想</p>
             </section>
             <section>
+                <h3>字符串工具</h3>
+                <p>StrUtil</p>
+                <pre data-id="code-animation">
+                    <code class="language-java hljs" data-trim data-line-numbers>
+StrUtil.isEmpty(str)
+String fileName = StrUtil.removeSuffix("pretty_girl.jpg", ".jpg")  //fileName -> pretty_girl
+String str = "abcdefgh";
+String strSub1 = StrUtil.sub(str, 2, 3); //strSub1 -> c
+String strSub2 = StrUtil.sub(str, 2, -3); //strSub2 -> cde
+String strSub3 = StrUtil.sub(str, 3, 2); //strSub2 -> c
+                    </code>
+                    </pre>
+            </section>
+            <section>
                 <h3>日期时间工具</h3>
                 <p>DateUtil</p>
                 <pre data-id="code-animation">
@@ -275,20 +289,11 @@ String today= DateUtil.today();
 DateUtil.yesterday()
 //明天
 DateUtil.tomorrow()
-                    </code>
-                    </pre>
-            </section>
-            <section>
-                <h3>字符串工具</h3>
-                <p>StrUtil</p>
-                <pre data-id="code-animation">
-                    <code class="language-java hljs" data-trim data-line-numbers>
-StrUtil.isEmpty(str)
-String fileName = StrUtil.removeSuffix("pretty_girl.jpg", ".jpg")  //fileName -> pretty_girl
-String str = "abcdefgh";
-String strSub1 = StrUtil.sub(str, 2, 3); //strSub1 -> c
-String strSub2 = StrUtil.sub(str, 2, -3); //strSub2 -> cde
-String strSub3 = StrUtil.sub(str, 3, 2); //strSub2 -> c
+
+if (StrUtil.isNotEmpty(param.getExpireDate())) {
+    DateTime expireDate = DateUtil.parseDate(param.getExpireDate());
+    param.setProdDate(DateUtil.formatDate(DateUtil.offsetDay(expireDate, -param.getPeriod())));
+}
                     </code>
                     </pre>
             </section>
