@@ -25,10 +25,40 @@
             </p>
         </section>
         <section style="text-align: left;">
+            <p>- 关于分库分表</p>
             <p>- 店号拦截器</p>
             <p>- Dozer和lombok</p>
             <p>- Mybatisplus-plus</p>
             <p>- 糊涂包</p>
+        </section>
+
+        <section data-background="#9BB7D4">
+            <section>
+                <h2>关于分库分表</h2>
+                <p>sharding-jdbc 与 disconf</p>
+            </section>
+            <section>
+                <h3>需要本地连接到BETA库？</h3>
+
+                <img src="assert/disconf.png" width="600">
+                <p>通过配置环境变量，让disconf读取beta配置即可。</p>
+            </section>
+            <section>
+                <h3>sharding-jdbc启动很慢？</h3>
+                <div style="font-size: 24px;">
+                    <ol>
+                        <li>启动慢的原因是：sharding-jdbc启动时会扫描数据库的元数据，当分库分表较多时启动就会慢。</li>
+                        <li>解决方法也很简单：在开发阶段可以禁止sharding-jdbc扫描元数据，删除如下配置即可。</li>
+                    </ol>
+                    <pre data-id="code-animation">
+                        <code class="language-java hljs" data-trim data-line-numbers="">
+spring.shardingsphere.sharding.default-data-source-name=XXX
+                        </code>
+                </pre>
+                </div>
+
+            </section>
+
         </section>
 
 
@@ -88,7 +118,7 @@ StoreNoInterceptorProperties {
                 <h3>店号拦截器的效果</h3>
 
                 <div data-auto-animate-delay="0">
-                        <pre data-id="code-animation" >
+                        <pre data-id="code-animation">
                         <code class="language-java hljs" data-trim data-line-numbers="2">
         taskInfoService.lambdaUpdate()
                 .eq(Task::getTaskId,"1")
@@ -100,7 +130,7 @@ StoreNoInterceptorProperties {
                 </div>
                 <div data-id="box2" data-auto-animate-delay="0">
 
-                        <pre data-id="code-animation" >
+                        <pre data-id="code-animation">
                         <code class="language-java hljs" data-trim data-line-numbers>
 org.mybatis.spring.MyBatisSystemException: nested exception is org.apache.ibatis.exceptions.PersistenceException:
 ### Error updating database.  Cause: com.rtmart.sni.StoreNoInterceptorException: 请修改sql，不允许不带店号(store_no)的DML语句执行！！！ --> UPDATE revert_task_info  SET create_time=?
@@ -147,7 +177,7 @@ org.mybatis.spring.MyBatisSystemException: nested exception is org.apache.ibatis
                     </div>
                 </div>
             </section>
-            <section data-auto-animate >
+            <section data-auto-animate>
                 <div class="r-hstack justify-center">
 
                     <div data-id="box1" data-auto-animate-delay="0">
