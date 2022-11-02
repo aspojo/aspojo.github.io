@@ -107,6 +107,13 @@ spring.shardingsphere.sharding.tables.my_XXX_table.table-strategy.inline.shardin
 
                         <pre data-id="code-animation" style="width: 600px; ">
                         <code class="language-java hljs" data-trim data-line-numbers>
+// pom 配置
+<dependency>
+    <groupId>top.logbug.sni</groupId>
+    <artifactId>store-no-interceptor-starter</artifactId>
+    <version>1.1.3</version>
+</dependency>
+// 配置项
 StoreNoInterceptorProperties {
     boolean enabled=true;
     // 兼容不同店号字段名称
