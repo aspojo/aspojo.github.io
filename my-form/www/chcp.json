@@ -7,6 +7,6 @@
   "ios_identifier": "my-form",
   "android_identifier": "my-form",
   "update": "start",
-  "content_url": "https://logbug.top/my-form/www",
+  "content_url": "http://127.0.0.1:3000",
   "release": "2022.11.18-19.27.43"
 }
