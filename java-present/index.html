@@ -48,11 +48,20 @@
                 <div style="font-size: 24px;">
                     <ol>
                         <li>启动慢的原因是：sharding-jdbc启动时会扫描数据库的元数据，当分库分表较多时启动就会慢。</li>
-                        <li>解决方法也很简单：在开发阶段可以禁止sharding-jdbc扫描元数据，删除如下配置即可。</li>
+                        <li>解决方法：在开发阶段可以禁止sharding-jdbc扫描元数据，删除默认库配置，并为所有需要到默认库的表配置分库分表规则。</li>
                     </ol>
                     <pre data-id="code-animation">
                         <code class="language-java hljs" data-trim data-line-numbers="">
+# 删除
 spring.shardingsphere.sharding.default-data-source-name=XXX
+# 添加
+spring.shardingsphere.sharding.tables.my_XXX_table.actual-data-nodes=revert0.revert_sup_item_config
+spring.shardingsphere.sharding.tables.my_XXX_table.database-strategy.inline.algorithm-expression=revert0
+spring.shardingsphere.sharding.tables.my_XXX_table.database-strategy.inline.sharding-column=id(这里可以是任意字段)
+spring.shardingsphere.sharding.tables.my_XXX_table.table-strategy.inline.algorithm-expression=my_XXX_table
+spring.shardingsphere.sharding.tables.my_XXX_table.table-strategy.inline.sharding-column=id(这里可以是任意字段)
+
+
                         </code>
                 </pre>
                 </div>
@@ -98,6 +107,13 @@ spring.shardingsphere.sharding.default-data-source-name=XXX
 
                         <pre data-id="code-animation" style="width: 600px; ">
                         <code class="language-java hljs" data-trim data-line-numbers>
+// pom 配置
+<dependency>
+    <groupId>top.logbug.sni</groupId>
+    <artifactId>store-no-interceptor-starter</artifactId>
+    <version>1.1.3</version>
+</dependency>
+// 配置项
 StoreNoInterceptorProperties {
     boolean enabled=true;
     // 兼容不同店号字段名称
@@ -346,7 +362,7 @@ CollUtil.toMap(new String[][]{{"k1", "v1"}, {"k2", "v2"}});
                 <p>Base64</p>
                 <pre data-id="code-animation">
                     <code class="language-java hljs" data-trim data-line-numbers>
-String a = "伦家是一个非常长的字符串";
+String a = "这是一个非常长的字符串";
 //5Lym5a625piv5LiA5Liq6Z2e5bi46ZW/55qE5a2X56ym5Liy
 String encode = Base64.encode(a);
 
