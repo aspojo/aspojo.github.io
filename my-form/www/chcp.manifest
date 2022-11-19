@@ -253,11 +253,11 @@
   },
   {
     "file": "index.html",
-    "hash": "08b3dd169dc245140399efb079ac789c"
+    "hash": "a08d47bb3cabb17664567e1b785fa5bd"
   },
   {
-    "file": "main.9d658d22aa840578.js",
-    "hash": "f34cd241ccc2555f9da6119e9b32435a"
+    "file": "main.b894bc2d28f3a358.js",
+    "hash": "782579fa29abac919ff9624c077d8254"
   },
   {
     "file": "plugins/com-darryncampbell-cordova-plugin-intent/www/IntentShim.js",
