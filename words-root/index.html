@@ -125,6 +125,7 @@
                 this.setMyRoots(await getMyConfig(user));
                 localStorage.setItem("user", user)
             }catch (e){
+                console.error("token 错误", e.stack);
                 alert("token 错误");
             }
 
