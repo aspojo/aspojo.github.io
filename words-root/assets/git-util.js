@@ -1,4 +1,4 @@
-import {Octokit} from "https://cdn.skypack.dev/@octokit/core";
+import {Octokit} from "https://cdn.skypack.dev/octokit@2.0.14?dts";
 
 let auth;
 const owner = 'aspojo';
