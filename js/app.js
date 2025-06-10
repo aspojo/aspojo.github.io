@@ -37,6 +37,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/common-db-query',
             home: './common-db-query/'
         },
+        {
+            name: '16进制转二进制',
+            desc: '16进制转二进制',
+            src: 'https://github.com/aspojo/utils/hex2bin.html',
+            home: './common-db-query/'
+        },
 
     ];
 
