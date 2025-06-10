@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>16进制转二进制</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+        .result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>16进制转二进制</h1>
+        <label for="hexInput">请输入16进制字符串：</label>
+        <input type="text" id="hexInput" placeholder="如：09 a6 90 0f 00 00 00 00 00 00 00">
+        <button onclick="convertHexToBinary()">转换</button>
+        <button onclick="convertHexToBinaryBigEndian()">小端转换</button>
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        function convertHexToBinary() {
+            // 获取输入的16进制字符串并去除空格
+            const hexString = document.getElementById('hexInput').value.trim().replace(/\s+/g, '');
+            let binaryString = '';
+
+            // 遍历16进制字符串中的每个字符
+            for (let i = 0; i < hexString.length; i++) {
+                // 将16进制字符转换为4位二进制字符串
+                const binaryChar = parseInt(hexString[i], 16).toString(2).padStart(4, '0');
+                binaryString += binaryChar;
+            }
+
+            // 将二进制字符串每8位反转并添加下标
+            let result = '';
+            let index = 0; // 用于记录当前位的下标
+            for (let i = 0; i < binaryString.length; i += 8) {
+                let chunk = binaryString.substring(i, i + 8);
+                // 反转每个8位字节
+                for (let j = chunk.length - 1; j >= 0; j--) {
+                    result += `${chunk[j]}(${index++})\t`; // 每个位之间用Tab分隔
+                }
+                result += '\n'; // 每8位换行
+            }
+
+            // 显示结果
+            document.getElementById('result').innerText = result.trim();
+        }
+
+        function convertHexToBinaryBigEndian() {
+            // 获取输入的16进制字符串并去除空格
+            const hexString = document.getElementById('hexInput').value.trim().replace(/\s+/g, '');
+            let binaryString = '';
+
+            // 遍历16进制字符串中的每个字符
+            for (let i = 0; i < hexString.length; i++) {
+                // 将16进制字符转换为4位二进制字符串
+                const binaryChar = parseInt(hexString[i], 16).toString(2).padStart(4, '0');
+                binaryString += binaryChar;
+            }
+
+            // 将二进制字符串每8位添加下标
+            let result = '';
+            let index = 0; // 用于记录当前位的下标
+            for (let i = 0; i < binaryString.length; i += 8) {
+                let chunk = binaryString.substring(i, i + 8);
+                for (let j = 0; j < chunk.length; j++) {
+                    result += `${chunk[j]}(${index++})\t`; // 每个位之间用Tab分隔
+                }
+                result += '\n'; // 每8位换行
+            }
+
+            // 显示结果
+            document.getElementById('result').innerText = result.trim();
+        }
+    </script>
+</body>
+</html>
