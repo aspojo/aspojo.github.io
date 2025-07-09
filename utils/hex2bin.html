@@ -62,7 +62,7 @@
             let index = 0; // 用于记录当前位的下标
             for (let i = 0; i < binaryString.length; i += 8) {
                 let chunk = binaryString.substring(i, i + 8);
-                result += binaryToHex(chunk);
+                result += '(\t'+i+'):  '+ binaryToHex(chunk);
                 // 反转每个8位字节
                 for (let j = chunk.length - 1; j >= 0; j--) {
                     result += `${chunk[j]}(${index++})\t`; // 每个位之间用Tab分隔
