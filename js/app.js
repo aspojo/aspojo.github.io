@@ -49,6 +49,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/utils/cbi40.html',
             home: './utils/cbi40.html'
         },
+        {
+            name: 'SDM->BiIOM变化报警和设备状态报文',
+            desc: 'SDM=>BiIOM变化报警和设备状态报文',
+            src: 'https://github.com/aspojo/utils/cbi43.html',
+            home: './utils/cbi43.html'
+        },
 
     ];
 

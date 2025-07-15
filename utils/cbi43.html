@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDM=>BiIOM变化报警和设备状态报文</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl">
+    <h1 class="text-2xl font-bold mb-4 text-center">SDM->BiIOM报文解析器</h1>
+    <div class="mb-4">
+        <label for="inputMessage" class="block text-sm font-medium text-gray-700">请输入16进制报文数据（可含空格）:</label>
+        <textarea id="inputMessage" rows="4" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="例如: AA 00 1A 43 19 07 0B 15 34 04 00 06 57 71 00 00 01 36 00 00 00 01 89 DE 55 14 DC C1 3F"></textarea>
+    </div>
+    <button onclick="parseMessage()" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">解析报文</button>
+    <div id="error" class="mt-4 text-red-500 hidden"></div>
+    <div id="result" class="mt-4 hidden">
+        <h2 class="text-lg font-semibold mb-2">解析结果</h2>
+        <table class="w-full border-collapse border border-gray-300">
+            <thead>
+            <tr class="bg-gray-200">
+                <th class="border border-gray-300 p-2">字段</th>
+                <th class="border border-gray-300 p-2">值</th>
+                <th class="border border-gray-300 p-2">说明</th>
+            </tr>
+            </thead>
+            <tbody id="resultTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function parseMessage() {
+        let input = document.getElementById('inputMessage').value.trim();
+        const errorDiv = document.getElementById('error');
+        const resultDiv = document.getElementById('result');
+        const resultTable = document.getElementById('resultTable');
+
+        errorDiv.classList.add('hidden');
+        resultDiv.classList.add('hidden');
+        resultTable.innerHTML = '';
+
+        // 去除输入中的所有空格
+        input = input.replace(/\s+/g, '');
+
+        // 验证输入是否为有效的16进制字符串
+        if (!/^[0-9A-Fa-f]+$/.test(input) || input.length % 2 !== 0) {
+            errorDiv.textContent = '请输入有效的16进制字符串（去除空格后，长度需为偶数）';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        // 将16进制字符串转换为字节数组
+        const bytes = [];
+        for (let i = 0; i < input.length; i += 2) {
+            bytes.push(parseInt(input.substr(i, 2), 16));
+        }
+
+        // 验证最小长度（固定字段：HEADER(1)+LEN(2)+MSG_ID(1)+STAMP(6)+SN(4)+CBI_ID(4)+ALARM_VAR_NUM(2)+STATE_VAR_NUM(2)+END(1)+CRC(4)=27字节）
+        if (bytes.length < 27) {
+            errorDiv.textContent = '报文长度不足，无法解析';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        let offset = 0;
+
+        // 解析HEADER
+        const header = bytes[offset];
+        if (header !== 0xAA) {
+            errorDiv.textContent = '帧开始标志错误，应为0xAA';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        addRow('HEADER', `0x${header.toString(16).padStart(2, '0').toUpperCase()}`, '帧开始标志');
+        offset += 1;
+
+        // 解析LEN
+        const len = (bytes[offset] << 8) | bytes[offset + 1];
+        addRow('LEN', len, '帧长度（从MSG_ID到CRC）');
+        offset += 2;
+
+        // 验证报文长度
+        if (bytes.length !== len + 3 ) { // HEADER(1)+LEN(2)+LEN指定的长度+CRC(4)
+            errorDiv.textContent = '报文长度与LEN字段不匹配';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        // 解析MSG_ID
+        const msgId = bytes[offset];
+        if (msgId !== 0x43) {
+            errorDiv.textContent = '消息ID错误，应为0x43';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        addRow('MSG_ID', `0x${msgId.toString(16).padStart(2, '0').toUpperCase()}`, '消息ID');
+        offset += 1;
+
+        // 解析STAMP
+        const year = bytes[offset] + 2000;
+        const month = bytes[offset + 1];
+        const day = bytes[offset + 2];
+        const hour = bytes[offset + 3];
+        const minute = bytes[offset + 4];
+        const second = bytes[offset + 5];
+        const stamp = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+        addRow('STAMP', stamp, '时间戳（年月日时分秒，北京时间）');
+        offset += 6;
+
+        // 解析SN
+        const sn = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
+        addRow('SN', sn, '报文序列号');
+        offset += 4;
+
+        // 解析CBI_ID
+        const cbiId = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
+        addRow('CBI_ID', cbiId, '联锁集中站编号');
+        offset += 4;
+
+        // 解析ALARM_VAR_NUM
+        const alarmVarNum = (bytes[offset] << 8) | bytes[offset + 1];
+        if (alarmVarNum > 100) {
+            errorDiv.textContent = '报警变化个数超过上限100';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        addRow('ALARM_VAR_NUM', alarmVarNum, '报警变化个数');
+        offset += 2;
+
+        // 解析ALARM_VARS
+        const alarmVars = [];
+        for (let i = 0; i < alarmVarNum; i++) {
+            if (offset + 2 > bytes.length) {
+                errorDiv.textContent = '报文长度不足以解析ALARM_VARS';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            const varValue = (bytes[offset] << 8) | bytes[offset + 1];
+            const position = varValue & 0x7FFF;
+            const state = (varValue >> 15) & 0x01;
+            alarmVars.push(`位置: ${position}, 状态: ${state}`);
+            offset += 2;
+        }
+        addRow('ALARM_VARS', alarmVars.length ? alarmVars.join('; ') : '无', '报警位置和状态信息');
+
+        // 解析STATE_VAR_NUM
+        const stateVarNum = (bytes[offset] << 8) | bytes[offset + 1];
+        if (stateVarNum > 100) {
+            errorDiv.textContent = '状态变化个数超过上限100';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        addRow('STATE_VAR_NUM', stateVarNum, '状态变化个数');
+        offset += 2;
+
+        // 解析STATE_VARS
+        const stateVars = [];
+        for (let i = 0; i < stateVarNum; i++) {
+            if (offset + 2 > bytes.length) {
+                errorDiv.textContent = '报文长度不足以解析STATE_VARS';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            const varValue = (bytes[offset] << 8) | bytes[offset + 1];
+            const position = varValue & 0x7FFF;
+            const state = (varValue >> 15) & 0x01;
+            stateVars.push(`位置: ${position}, 状态: ${state}`);
+            offset += 2;
+        }
+        addRow('STATE_VARS', stateVars.length ? stateVars.join('; ') : '无', '状态位置和状态信息');
+
+        // 解析END
+        const end = bytes[offset];
+        if (end !== 0x55) {
+            errorDiv.textContent = '帧结束标志错误，应为0x55';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        addRow('END', `0x${end.toString(16).padStart(2, '0').toUpperCase()}`, '帧结束标志');
+        offset += 1;
+
+        // 解析CRC
+        const crc = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
+        addRow('CRC', `0x${crc.toString(16).padStart(8, '0').toUpperCase()}`, 'CRC校验值（请自行验证CRC算法）');
+
+        // 显示结果
+        resultDiv.classList.remove('hidden');
+    }
+
+    function addRow(field, value, description) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+        <td class="border border-gray-300 p-2">${field}</td>
+        <td class="border border-gray-300 p-2">${value}</td>
+        <td class="border border-gray-300 p-2">${description}</td>
+      `;
+        document.getElementById('resultTable').appendChild(row);
+    }
+</script>
+</body>
+</html>
