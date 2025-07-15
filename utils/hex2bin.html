@@ -6,112 +6,168 @@
     <title>16进制转二进制</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
         }
         .container {
-            max-width: 600px;
+            max-width: 700px;
             margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
         }
         label {
             display: block;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            color: #34495e;
         }
         input[type="text"] {
             width: 100%;
-            padding: 8px;
+            padding: 12px;
             box-sizing: border-box;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        input[type="text"]:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 8px rgba(52, 152, 219, 0.3);
+            outline: none;
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
         }
         button {
-            padding: 10px 20px;
-            margin-top: 10px;
-            margin-right: 10px;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        button.primary {
+            background-color: #3498db;
+            color: white;
+        }
+        button.primary:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+        button.secondary {
+            background-color: #2ecc71;
+            color: white;
+        }
+        button.secondary:hover {
+            background-color: #27ae60;
+            transform: translateY(-2px);
         }
         .result {
-            margin-top: 20px;
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
             white-space: pre-wrap;
-            font-family: monospace;
+            border-left: 4px solid #3498db;
+            color: #2c3e50;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 0.9rem;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>16进制转二进制</h1>
-        <label for="hexInput">请输入16进制字符串：</label>
-        <input type="text" id="hexInput" placeholder="如：09 a6 90 0f 00 00 00 00 00 00 00">
-        <button onclick="convertHexToBinary()">转换</button>
-        <button onclick="convertHexToBinaryBigEndian()">小端转换</button>
-        <div class="result" id="result"></div>
+<div class="container">
+    <h1>16进制转二进制转换器</h1>
+    <label for="hexInput">请输入16进制字符串：</label>
+    <input type="text" id="hexInput" placeholder="如：09 a6 90 0f 00 00 00 00 00 00 00">
+    <div class="button-group">
+        <button class="primary" onclick="convertHexToBinary()">转换</button>
+        <button class="secondary" onclick="convertHexToBinaryBigEndian()">小端转换</button>
     </div>
+    <div class="result" id="result"></div>
+</div>
 
-    <script>
-        function convertHexToBinary() {
-            // 获取输入的16进制字符串并去除空格
-            const hexString = document.getElementById('hexInput').value.trim().replace(/\s+/g, '');
-            let binaryString = '';
-
-            // 遍历16进制字符串中的每个字符
+<script>
+    function convertHexToBinary() {
+        const hexString = document.getElementById('hexInput').value.trim().replace(/\s+/g, '');
+        let binaryString = '';
+        try {
             for (let i = 0; i < hexString.length; i++) {
-                // 将16进制字符转换为4位二进制字符串
                 const binaryChar = parseInt(hexString[i], 16).toString(2).padStart(4, '0');
                 binaryString += binaryChar;
             }
-
-            // 将二进制字符串每8位反转并添加下标
             let result = '';
-            let index = 0; // 用于记录当前位的下标
+            let index = 0;
             for (let i = 0; i < binaryString.length; i += 8) {
                 let chunk = binaryString.substring(i, i + 8);
-                result += binaryToHex(chunk) + '('+i/8+'\t):  ';
-                // 反转每个8位字节
+                result += binaryToHex(chunk) + '(' + (i/8) + '\t):  ';
                 for (let j = chunk.length - 1; j >= 0; j--) {
-                    result += `${chunk[j]}(${index++})\t`; // 每个位之间用Tab分隔
+                    result += `${chunk[j]}(${index++})\t`;
                 }
-                result += '\n'; // 每8位换行
+                result += '\n';
             }
-
-            // 显示结果
             document.getElementById('result').innerText = result.trim();
+        } catch (e) {
+            document.getElementById('result').innerText = '错误：请输入有效的16进制字符串';
         }
-        function binaryToHex(binaryStr) {
-          // 确保是8位二进制
-          if (binaryStr.length !== 8 || !/^[01]+$/.test(binaryStr)) {
+    }
+
+    function binaryToHex(binaryStr) {
+        if (binaryStr.length !== 8 || !/^[01]+$/.test(binaryStr)) {
             throw new Error("输入必须是8位二进制字符串");
-          }
-        
-          // 将二进制字符串转为十进制，再转为16进制字符串
-          const hex = parseInt(binaryStr, 2).toString(16).toUpperCase();
-        
-          // 如果结果是一位，补零
-          return hex.padStart(2, '0');
         }
+        const hex = parseInt(binaryStr, 2).toString(16).toUpperCase();
+        return hex.padStart(2, '0');
+    }
 
-        function convertHexToBinaryBigEndian() {
-            // 获取输入的16进制字符串并去除空格
-            const hexString = document.getElementById('hexInput').value.trim().replace(/\s+/g, '');
-            let binaryString = '';
-
-            // 遍历16进制字符串中的每个字符
+    function convertHexToBinaryBigEndian() {
+        const hexString = document.getElementById('hexInput').value.trim().replace(/\s+/g, '');
+        let binaryString = '';
+        try {
             for (let i = 0; i < hexString.length; i++) {
-                // 将16进制字符转换为4位二进制字符串
                 const binaryChar = parseInt(hexString[i], 16).toString(2).padStart(4, '0');
                 binaryString += binaryChar;
             }
-
-            // 将二进制字符串每8位添加下标
             let result = '';
-            let index = 0; // 用于记录当前位的下标
+            let index = 0;
             for (let i = 0; i < binaryString.length; i += 8) {
                 let chunk = binaryString.substring(i, i + 8);
                 for (let j = 0; j < chunk.length; j++) {
-                    result += `${chunk[j]}(${index++})\t`; // 每个位之间用Tab分隔
+                    result += `${chunk[j]}(${index++})\t`;
                 }
-                result += '\n'; // 每8位换行
+                result += '\n';
             }
-
-            // 显示结果
             document.getElementById('result').innerText = result.trim();
+        } catch (e) {
+            document.getElementById('result').innerText = '错误：请输入有效的16进制字符串';
         }
-    </script>
+    }
+</script>
 </body>
 </html>

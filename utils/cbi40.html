@@ -6,58 +6,130 @@
     <title>SDM=>BiIOM全体报警和设备状态报文</title>
     <style>
         body {
-            font-family: Arial, 'Microsoft YaHei', sans-serif;
-            margin: 20px;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #2c3e50;
         }
         .container {
-            /*max-width: 1200px;*/
+            max-width: 1366px;
             margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        h2 {
+            color: #34495e;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
         }
         .input-section {
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
         #hexInput {
             width: 100%;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 14px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            resize: vertical;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        #hexInput:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 8px rgba(52, 152, 219, 0.3);
+            outline: none;
         }
         #parseButton {
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
             cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        #parseButton:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
         }
         .info-section {
             margin: 20px 0;
-            padding: 10px;
-            border: 1px solid #ccc;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            font-size: 0.95rem;
+            line-height: 1.6;
         }
         .split-section {
             display: flex;
             gap: 20px;
+            flex-wrap: wrap;
         }
         .split-section > div {
             flex: 1;
-            padding: 10px;
-            border: 1px solid #ccc;
-            max-height: 400px;
+            min-width: 300px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            max-height: 500px;
             overflow-y: auto;
+        }
+        h3 {
+            color: #34495e;
+            margin-top: 0;
+            font-size: 1.3rem;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            margin-top: 15px;
+            font-size: 0.9rem;
         }
         th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
+            border: 1px solid #e0e0e0;
+            padding: 10px;
             text-align: center;
         }
         th {
-            background-color: #f0f0f0;
+            background-color: #34495e;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #e8f4f8;
         }
         .error {
-            color: red;
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
+            #parseButton {
+                width: 100%;
+                padding: 12px;
+            }
+            .split-section {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -78,14 +150,14 @@
                 <tr>
                     <th>字节序号</th>
                     <th>字节值</th>
-                    <th>位 7</th>
-                    <th>位 6</th>
-                    <th>位 5</th>
-                    <th>位 4</th>
+                    <th>位 0</th>
+                    <th>位 1</th>
                     <th>位 3</th>
                     <th>位 2</th>
-                    <th>位 1</th>
-                    <th>位 0</th>
+                    <th>位 4</th>
+                    <th>位 5</th>
+                    <th>位 6</th>
+                    <th>位 7</th>
                 </tr>
                 </thead>
                 <tbody></tbody>
@@ -98,14 +170,14 @@
                 <tr>
                     <th>字节序号</th>
                     <th>字节值</th>
-                    <th>位 7</th>
-                    <th>位 6</th>
-                    <th>位 5</th>
-                    <th>位 4</th>
+                    <th>位 0</th>
+                    <th>位 1</th>
                     <th>位 3</th>
                     <th>位 2</th>
-                    <th>位 1</th>
-                    <th>位 0</th>
+                    <th>位 4</th>
+                    <th>位 5</th>
+                    <th>位 6</th>
+                    <th>位 7</th>
                 </tr>
                 </thead>
                 <tbody></tbody>
@@ -145,12 +217,12 @@
     }
 
     function validateMessage(bytes) {
-        if (bytes.length < 20) return false; // 最小长度：HEADER(1) + LEN(2) + MSG_ID(1) + STAMP(6) + SN(4) + CBI_ID(4) + ALARM_NUM(2) + STATE_NUM(2) + END(1) + CRC(4)
-        if (bytes[0] !== 0xAA) return false; // HEADER
-        if (bytes[3] !== 0x40) return false; // MSG_ID
-        if (bytes[bytes.length - 5] !== 0x55) return false; // END
+        if (bytes.length < 20) return false;
+        if (bytes[0] !== 0xAA) return false;
+        if (bytes[3] !== 0x40) return false;
+        if (bytes[bytes.length - 5] !== 0x55) return false;
         const len = (bytes[1] << 8) | bytes[2];
-        if (len !== bytes.length - 3) return false; // LEN 检查
+        if (len !== bytes.length - 3) return false;
         return true;
     }
 
@@ -181,19 +253,19 @@
     function displayInfo(parsed) {
         const infoSection = document.getElementById('infoSection');
         infoSection.innerHTML = `
-                <strong>报文详情：</strong><br>
-                帧头（HEADER）：0x${parsed.header.toString(16).padStart(2, '0').toUpperCase()}<br>
-                帧长度（LEN）：${parsed.len} 字节<br>
-                消息ID（MSG_ID）：0x${parsed.msgId.toString(16).padStart(2, '0').toUpperCase()}<br>
-                时间戳（STAMP）：${parsed.stamp.year}-${parsed.stamp.month.toString().padStart(2, '0')}-${parsed.stamp.day.toString().padStart(2, '0')}
-                       ${parsed.stamp.hour.toString().padStart(2, '0')}:${parsed.stamp.minute.toString().padStart(2, '0')}:${parsed.stamp.second.toString().padStart(2, '0')}<br>
-                序列号（SN）：${parsed.sn}<br>
-                联锁站编号（CBI_ID）：${parsed.cbiId}<br>
-                报警数据长度（ALARM_NUM）：${parsed.alarmNum} 字节<br>
-                状态数据长度（STATE_NUM）：${parsed.stateNum} 字节<br>
-                帧尾（END）：0x${parsed.end.toString(16).padStart(2, '0').toUpperCase()}<br>
-                CRC校验：0x${parsed.crc.toString(16).padStart(8, '0').toUpperCase()}
-            `;
+            <strong>报文详情：</strong><br>
+            帧头（HEADER）：0x${parsed.header.toString(16).padStart(2, '0').toUpperCase()}<br>
+            帧长度（LEN）：${parsed.len} 字节<br>
+            消息ID（MSG_ID）：0x${parsed.msgId.toString(16).padStart(2, '0').toUpperCase()}<br>
+            时间戳（STAMP）：${parsed.stamp.year}-${parsed.stamp.month.toString().padStart(2, '0')}-${parsed.stamp.day.toString().padStart(2, '0')}
+                   ${parsed.stamp.hour.toString().padStart(2, '0')}:${parsed.stamp.minute.toString().padStart(2, '0')}:${parsed.stamp.second.toString().padStart(2, '0')}<br>
+            序列号（SN）：${parsed.sn}<br>
+            联锁站编号（CBI_ID）：${parsed.cbiId}<br>
+            报警数据长度（ALARM_NUM）：${parsed.alarmNum} 字节<br>
+            状态数据长度（STATE_NUM）：${parsed.stateNum} 字节<br>
+            帧尾（END）：0x${parsed.end.toString(16).padStart(2, '0').toUpperCase()}<br>
+            CRC校验：0x${parsed.crc.toString(16).padStart(8, '0').toUpperCase()}
+        `;
     }
 
     function displayData(data, tableId, dataType, dataNum) {
@@ -206,14 +278,14 @@
             row.innerHTML = `
                 <td>${i + 1}</td>
                 <td>${byteHex}</td>
-                <td>${(byte >> 7) & 1} (${i * 8 + 0})</td>
-                <td>${(byte >> 6) & 1} (${i * 8 + 1})</td>
-                <td>${(byte >> 5) & 1} (${i * 8 + 2})</td>
-                <td>${(byte >> 4) & 1} (${i * 8 + 3})</td>
-                <td>${(byte >> 3) & 1} (${i * 8 + 4})</td>
-                <td>${(byte >> 2) & 1} (${i * 8 + 5})</td>
-                <td>${(byte >> 1) & 1} (${i * 8 + 6})</td>
-                <td>${byte & 1} (${i * 8 + 7})</td>
+                <td>${byte & 1} (${i * 8 + 0})</td>
+                <td>${(byte >> 1) & 1} (${i * 8 + 1})</td>
+                <td>${(byte >> 2) & 1} (${i * 8 + 2})</td>
+                <td>${(byte >> 3) & 1} (${i * 8 + 3})</td>
+                <td>${(byte >> 4) & 1} (${i * 8 + 4})</td>
+                <td>${(byte >> 5) & 1} (${i * 8 + 5})</td>
+                <td>${(byte >> 6) & 1} (${i * 8 + 6})</td>
+                <td>${(byte >> 7) & 1} (${i * 8 + 7})</td>
             `;
             tbody.appendChild(row);
         }
