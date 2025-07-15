@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDM=>BiIOM全体报警和设备状态报文</title>
+    <style>
+        body {
+            font-family: Arial, 'Microsoft YaHei', sans-serif;
+            margin: 20px;
+        }
+        .container {
+            /*max-width: 1200px;*/
+            margin: 0 auto;
+        }
+        .input-section {
+            margin-bottom: 20px;
+        }
+        #hexInput {
+            width: 100%;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        #parseButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .info-section {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        .split-section {
+            display: flex;
+            gap: 20px;
+        }
+        .split-section > div {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f0f0f0;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="input-section">
+        <h2>SDM=>BiIOM全体报警和设备状态报文</h2>
+        <textarea id="hexInput" rows="4" placeholder="请输入十六进制字符串（例如：AA00124020230715123000000001000000020001010001010155ABCD1234）"></textarea>
+        <br>
+        <button id="parseButton">解析</button>
+    </div>
+    <div class="info-section" id="infoSection"></div>
+    <div class="split-section">
+        <div id="alarmSection">
+            <h3>报警数据</h3>
+            <table id="alarmTable">
+                <thead>
+                <tr>
+                    <th>字节序号</th>
+                    <th>字节值</th>
+                    <th>位 7</th>
+                    <th>位 6</th>
+                    <th>位 5</th>
+                    <th>位 4</th>
+                    <th>位 3</th>
+                    <th>位 2</th>
+                    <th>位 1</th>
+                    <th>位 0</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div id="stateSection">
+            <h3>状态数据</h3>
+            <table id="stateTable">
+                <thead>
+                <tr>
+                    <th>字节序号</th>
+                    <th>字节值</th>
+                    <th>位 7</th>
+                    <th>位 6</th>
+                    <th>位 5</th>
+                    <th>位 4</th>
+                    <th>位 3</th>
+                    <th>位 2</th>
+                    <th>位 1</th>
+                    <th>位 0</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('parseButton').addEventListener('click', parseMessage);
+
+    function parseMessage() {
+        const hexInput = document.getElementById('hexInput').value.replace(/\s/g, '');
+        if (!/^[0-9A-Fa-f]+$/.test(hexInput)) {
+            displayError('无效的十六进制字符串');
+            return;
+        }
+
+        const bytes = hexToBytes(hexInput);
+        if (!validateMessage(bytes)) {
+            displayError('报文格式无效');
+            return;
+        }
+
+        const parsed = parseMessageData(bytes);
+        displayInfo(parsed);
+        displayData(parsed.alarmData, 'alarmTable', '报警数据', parsed.alarmNum);
+        displayData(parsed.stateData, 'stateTable', '状态数据', parsed.stateNum);
+    }
+
+    function hexToBytes(hex) {
+        const bytes = [];
+        for (let i = 0; i < hex.length; i += 2) {
+            bytes.push(parseInt(hex.substr(i, 2), 16));
+        }
+        return bytes;
+    }
+
+    function validateMessage(bytes) {
+        if (bytes.length < 20) return false; // 最小长度：HEADER(1) + LEN(2) + MSG_ID(1) + STAMP(6) + SN(4) + CBI_ID(4) + ALARM_NUM(2) + STATE_NUM(2) + END(1) + CRC(4)
+        if (bytes[0] !== 0xAA) return false; // HEADER
+        if (bytes[3] !== 0x40) return false; // MSG_ID
+        if (bytes[bytes.length - 5] !== 0x55) return false; // END
+        const len = (bytes[1] << 8) | bytes[2];
+        if (len !== bytes.length - 3) return false; // LEN 检查
+        return true;
+    }
+
+    function parseMessageData(bytes) {
+        const result = {};
+        result.header = bytes[0];
+        result.len = (bytes[1] << 8) | bytes[2];
+        result.msgId = bytes[3];
+        result.stamp = {
+            year: 2000 + bytes[4],
+            month: bytes[5],
+            day: bytes[6],
+            hour: bytes[7],
+            minute: bytes[8],
+            second: bytes[9]
+        };
+        result.sn = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+        result.cbiId = (bytes[14] << 24) | (bytes[15] << 16) | (bytes[16] << 8) | bytes[17];
+        result.alarmNum = (bytes[18] << 8) | bytes[19];
+        result.alarmData = bytes.slice(20, 20 + result.alarmNum);
+        result.stateNum = (bytes[20 + result.alarmNum] << 8) | bytes[20 + result.alarmNum + 1];
+        result.stateData = bytes.slice(20 + result.alarmNum + 2, 20 + result.alarmNum + 2 + result.stateNum);
+        result.end = bytes[bytes.length - 5];
+        result.crc = (bytes[bytes.length - 4] << 24) | (bytes[bytes.length - 3] << 16) | (bytes[bytes.length - 2] << 8) | bytes[bytes.length - 1];
+        return result;
+    }
+
+    function displayInfo(parsed) {
+        const infoSection = document.getElementById('infoSection');
+        infoSection.innerHTML = `
+                <strong>报文详情：</strong><br>
+                帧头（HEADER）：0x${parsed.header.toString(16).padStart(2, '0').toUpperCase()}<br>
+                帧长度（LEN）：${parsed.len} 字节<br>
+                消息ID（MSG_ID）：0x${parsed.msgId.toString(16).padStart(2, '0').toUpperCase()}<br>
+                时间戳（STAMP）：${parsed.stamp.year}-${parsed.stamp.month.toString().padStart(2, '0')}-${parsed.stamp.day.toString().padStart(2, '0')}
+                       ${parsed.stamp.hour.toString().padStart(2, '0')}:${parsed.stamp.minute.toString().padStart(2, '0')}:${parsed.stamp.second.toString().padStart(2, '0')}<br>
+                序列号（SN）：${parsed.sn}<br>
+                联锁站编号（CBI_ID）：${parsed.cbiId}<br>
+                报警数据长度（ALARM_NUM）：${parsed.alarmNum} 字节<br>
+                状态数据长度（STATE_NUM）：${parsed.stateNum} 字节<br>
+                帧尾（END）：0x${parsed.end.toString(16).padStart(2, '0').toUpperCase()}<br>
+                CRC校验：0x${parsed.crc.toString(16).padStart(8, '0').toUpperCase()}
+            `;
+    }
+
+    function displayData(data, tableId, dataType, dataNum) {
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = '';
+        for (let i = 0; i < dataNum; i++) {
+            const byte = data[i] || 0;
+            const byteHex = '0x' + byte.toString(16).padStart(2, '0').toUpperCase();
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${i + 1}</td>
+                <td>${byteHex}</td>
+                <td>${(byte >> 7) & 1} (${i * 8 + 0})</td>
+                <td>${(byte >> 6) & 1} (${i * 8 + 1})</td>
+                <td>${(byte >> 5) & 1} (${i * 8 + 2})</td>
+                <td>${(byte >> 4) & 1} (${i * 8 + 3})</td>
+                <td>${(byte >> 3) & 1} (${i * 8 + 4})</td>
+                <td>${(byte >> 2) & 1} (${i * 8 + 5})</td>
+                <td>${(byte >> 1) & 1} (${i * 8 + 6})</td>
+                <td>${byte & 1} (${i * 8 + 7})</td>
+            `;
+            tbody.appendChild(row);
+        }
+    }
+
+    function displayError(message) {
+        const infoSection = document.getElementById('infoSection');
+        infoSection.innerHTML = `<span class="error">错误：${message}</span>`;
+        document.querySelector('#alarmTable tbody').innerHTML = '';
+        document.querySelector('#stateTable tbody').innerHTML = '';
+    }
+</script>
+</body>
+</html>

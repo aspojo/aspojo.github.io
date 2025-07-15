@@ -43,6 +43,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/utils/hex2bin.html',
             home: './utils/hex2bin.html'
         },
+        {
+            name: 'SDM=>BiIOM全体报警和设备状态报文',
+            desc: 'SDM=>BiIOM全体报警和设备状态报文',
+            src: 'https://github.com/aspojo/utils/cbi40.html',
+            home: './utils/cbi40.html'
+        },
 
     ];
 
