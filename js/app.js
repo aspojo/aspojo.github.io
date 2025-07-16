@@ -55,6 +55,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/utils/cbi43.html',
             home: './utils/cbi43.html'
         },
+        {
+            name: 'MSS 报文解析工具集',
+            desc: 'MSS 报文解析工具集',
+            src: 'https://github.com/aspojo/utils/mss.html',
+            home: './utils/mss.html'
+        },
 
     ];
 
