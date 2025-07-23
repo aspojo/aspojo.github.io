@@ -116,6 +116,10 @@
             color: #e74c3c;
             font-weight: 600;
         }
+        .bit-active {
+            background-color: #e74c3c;
+            color: white;
+        }
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -278,14 +282,14 @@
             row.innerHTML = `
                 <td>${i + 1}</td>
                 <td>${byteHex}</td>
-                <td>${byte & 1} (${i * 8 + 0})</td>
-                <td>${(byte >> 1) & 1} (${i * 8 + 1})</td>
-                <td>${(byte >> 2) & 1} (${i * 8 + 2})</td>
-                <td>${(byte >> 3) & 1} (${i * 8 + 3})</td>
-                <td>${(byte >> 4) & 1} (${i * 8 + 4})</td>
-                <td>${(byte >> 5) & 1} (${i * 8 + 5})</td>
-                <td>${(byte >> 6) & 1} (${i * 8 + 6})</td>
-                <td>${(byte >> 7) & 1} (${i * 8 + 7})</td>
+                <td class="${byte & 1 ? 'bit-active' : ''}">${byte & 1} (${i * 8 + 0})</td>
+                <td class="${(byte >> 1) & 1 ? 'bit-active' : ''}">${(byte >> 1) & 1} (${i * 8 + 1})</td>
+                <td class="${(byte >> 2) & 1 ? 'bit-active' : ''}">${(byte >> 2) & 1} (${i * 8 + 2})</td>
+                <td class="${(byte >> 3) & 1 ? 'bit-active' : ''}">${(byte >> 3) & 1} (${i * 8 + 3})</td>
+                <td class="${(byte >> 4) & 1 ? 'bit-active' : ''}">${(byte >> 4) & 1} (${i * 8 + 4})</td>
+                <td class="${(byte >> 5) & 1 ? 'bit-active' : ''}">${(byte >> 5) & 1} (${i * 8 + 5})</td>
+                <td class="${(byte >> 6) & 1 ? 'bit-active' : ''}">${(byte >> 6) & 1} (${i * 8 + 6})</td>
+                <td class="${(byte >> 7) & 1 ? 'bit-active' : ''}">${(byte >> 7) & 1} (${i * 8 + 7})</td>
             `;
             tbody.appendChild(row);
         }
