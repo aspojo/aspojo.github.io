@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEU->BiIOM报文解析器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+<div class="w-full max-w-4xl bg-white rounded-lg shadow-lg p-6">
+    <h1 class="text-2xl font-bold text-center mb-4">LEU->BiIOM报文解析器</h1>
+    <div class="mb-4">
+        <label for="packetInput" class="block text-sm font-medium text-gray-700">请输入报文（十六进制字符串，可含空格）:</label>
+        <textarea id="packetInput" class="mt-1 block w-full h-24 p-2 border border-gray-300 rounded-md" placeholder="请输入十六进制报文，例如：AA 00 12 34 或 AA001234"></textarea>
+    </div>
+    <div id="error" class="mt-2 text-red-600 hidden"></div>
+    <button id="parseButton" class="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600">解析报文</button>
+    <div id="result" class="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-md hidden">
+        <h2 class="text-lg font-semibold">解析结果</h2>
+        <div id="resultContent" class="mt-2 space-y-2"></div>
+    </div>
+</div>
+
+<script>
+    // 码位解析函数
+    const parseBitField = (byte, table, bitDescriptions) => {
+        let result = [];
+        for (let i = 1; i <= 8; i++) {
+            const bitValue = (byte >> (8 - i)) & 1;
+            if (bitDescriptions[table][i]) {
+                result.push(`${bitDescriptions[table][i].name}: ${bitValue} (${bitDescriptions[table][i].desc[bitValue]})`);
+            }
+        }
+        return result.join(', ');
+    };
+
+    // 码位描述
+    const bitDescriptions = {
+        power: {
+            1: { name: 'A1', desc: { 0: '功放板1路电源开启', 1: '功放板1路电源切断' } },
+            2: { name: 'A2', desc: { 0: '功放板2路电源开启', 1: '功放板2路电源切断' } },
+            3: { name: 'A3', desc: { 0: '功放板3路电源开启', 1: '功放板3路电源切断' } },
+            4: { name: 'A4', desc: { 0: '功放板4路电源开启', 1: '功放板4路电源切断' } },
+            5: { name: 'B1', desc: { 0: '第1路动态方波正常', 1: '第1路动态方波异常' } },
+            6: { name: 'B2', desc: { 0: '第2路动态方波正常', 1: '第2路动态方波异常' } },
+            7: { name: 'B3', desc: { 0: '第3路动态方波正常', 1: '第3路动态方波异常' } },
+            8: { name: 'B4', desc: { 0: '第4路动态方波正常', 1: '第4路动态方波异常' } },
+        },
+        cpu: {
+            1: { name: 'A1', desc: { 0: '处理器板板级状态正常', 1: '处理器板板级状态异常' } },
+            2: { name: 'A2', desc: { 0: '与CI通信正常', 1: '与CI通信异常' } },
+            3: { name: 'B1', desc: { 0: '正常报文类型', 1: '默认报文类型' } },
+            4: { name: 'B2', desc: { 0: '接收MTP帧正常', 1: '接收MTP帧异常' } },
+        },
+        detection: {
+            1: { name: 'A1', desc: { 0: '检测板自检通过', 1: '检测板自检未通过' } },
+            2: { name: 'A2', desc: { 0: '接收PTM帧正常', 1: '接收PTM帧异常' } },
+            3: { name: 'B1', desc: { 0: 'CAN监测正常', 1: '未连接CAN监测' } },
+        },
+        apm: {
+            1: { name: 'A1', desc: { 0: 'C1接口（DBPL码）输出正常', 1: 'C1接口（DBPL码）输出异常' } },
+            3: { name: 'B1', desc: { 0: 'C6接口（8.82kHz）输出正常', 1: 'C6接口（8.82kHz）输出异常' } },
+            4: { name: 'B2', desc: { 0: '功放板工作电源（IE信号）正常', 1: '功放板工作电源（IE信号）异常' } },
+        }
+    };
+
+    // 解析报文
+    function parsePacket(packet) {
+        let result = [];
+        let pos = 0;
+
+        // HEADER (1 byte)
+        const header = parseInt(packet.slice(pos, pos + 2), 16);
+        if (header !== 0xAA) return '错误：无效的帧头';
+        result.push(`帧头: 0x${header.toString(16).padStart(2, '0')}`);
+        pos += 2;
+
+        // LEN (2 bytes)
+        const len = parseInt(packet.slice(pos, pos + 4), 16);
+        const actualLen = (packet.length - 10) / 2; // HEADER(1)+LEN(2)+END(1)+CRC(4)=10
+        if (len !== actualLen - 5) { // 减去末尾5字节填充
+            result.push(`警告：帧长度不匹配，预期${len}字节，实际${actualLen - 5}字节`);
+        }
+        result.push(`帧长度: ${len}`);
+        pos += 4;
+
+        // MSG_ID (1 byte)
+        const msgId = parseInt(packet.slice(pos, pos + 2), 16);
+        result.push(`消息类型: LEU_TO_MSS_ALARM_INFO (0x${msgId.toString(16).padStart(2, '0')})`);
+        pos += 2;
+
+        // STAMP (6 bytes)
+        const stamp = packet.slice(pos, pos + 12);
+        const year = parseInt(stamp.slice(0, 2), 16);
+        const month = parseInt(stamp.slice(2, 4), 16);
+        const day = parseInt(stamp.slice(4, 6), 16);
+        const hour = parseInt(stamp.slice(6, 8), 16);
+        const minute = parseInt(stamp.slice(8, 10), 16);
+        const second = parseInt(stamp.slice(10, 12), 16);
+        result.push(`时间戳: ${year}-${month}-${day} ${hour}:${minute}:${second}`);
+        pos += 12;
+
+        // STATION_INDEX (1 byte)
+        const stationIndex = parseInt(packet.slice(pos, pos + 2), 16);
+        result.push(`车站编号: ${stationIndex}`);
+        pos += 2;
+
+        // SN (4 bytes)
+        const sn = parseInt(packet.slice(pos, pos + 8), 16);
+        result.push(`帧序列号: ${sn} (0x${sn.toString(16).padStart(8, '0')})`);
+        pos += 8;
+
+        // LEU_NUM (1 byte)
+        const leuNum = parseInt(packet.slice(pos, pos + 2), 16);
+        result.push(`LEU数量: ${leuNum}`);
+        pos += 2;
+
+        // LEU 数据
+        for (let i = 1; i <= leuNum; i++) {
+            result.push(`<strong>LEU(${i})</strong>`);
+
+            // LEU_INDEX (4 bytes)
+            const leuIndex = parseInt(packet.slice(pos, pos + 8), 16);
+            result.push(`LEU编号: ${leuIndex} (0x${leuIndex.toString(16).padStart(8, '0')})`);
+            pos += 8;
+
+            // LEU_STATUS (1 byte)
+            const leuStatus = parseInt(packet.slice(pos, pos + 2), 16);
+            const statusMap = { 0xAA: '正常', 0x55: '故障', 0x00: '无效' };
+            result.push(`LEU主机状态: ${statusMap[leuStatus] || '未知'} (0x${leuStatus.toString(16).padStart(2, '0')})`);
+            pos += 2;
+
+            if (leuStatus === 0x00) {
+                // 无效状态，仅解析B1位
+                pos += 6; // 跳过POWER, CPU, DETECTION状态
+                const apmStatus = [];
+                for (let j = 1; j <= 4; j++) {
+                    apmStatus.push(parseInt(packet.slice(pos, pos + 2), 16));
+                    pos += 2;
+                }
+                result.push(`功放板状态: ${apmStatus.map((s, idx) => `APM(${idx + 1}): 0x${s.toString(16).padStart(2, '0')}`).join(', ')}`);
+                pos += 2; // 跳过NID_LEU_SW_NUM
+                pos += 21; // 跳过软件版本号 (7 * 3 bytes)
+                continue;
+            }
+
+            // POWER_STATUS (1 byte)
+            const powerStatus = parseInt(packet.slice(pos, pos + 2), 16);
+            result.push(`控制板状态: ${parseBitField(powerStatus, 'power', bitDescriptions)}`);
+            pos += 2;
+
+            // CPU_STATUS (1 byte)
+            const cpuStatus = parseInt(packet.slice(pos, pos + 2), 16);
+            result.push(`处理器板状态: ${parseBitField(cpuStatus, 'cpu', bitDescriptions)}`);
+            pos += 2;
+
+            // DETECTION_STATUS (1 byte)
+            const detectionStatus = parseInt(packet.slice(pos, pos + 2), 16);
+            result.push(`检测板状态: ${parseBitField(detectionStatus, 'detection', bitDescriptions)}`);
+            pos += 2;
+
+            // APM_STATUS (4 bytes)
+            for (let j = 1; j <= 4; j++) {
+                const apmStatus = parseInt(packet.slice(pos, pos + 2), 16);
+                result.push(`功放板(${j})状态: ${parseBitField(apmStatus, 'apm', bitDescriptions)}`);
+                pos += 2;
+            }
+
+            // NID_LEU_SW_NUM (1 byte)
+            const swNum = parseInt(packet.slice(pos, pos + 2), 16);
+            result.push(`LEU软件数量: ${swNum}`);
+            pos += 2;
+
+            // 软件版本号 (7 * 3 bytes)
+            const swNames = [
+                '检测板DSP1', '检测板DSP2', '检测板FPGA',
+                '处理器板DSP1', '处理器板FPGA1', '处理器板DSP2', '处理器板FPGA2'
+            ];
+            for (let j = 0; j < swNum; j++) {
+                const swVersion = parseInt(packet.slice(pos, pos + 6), 16);
+                result.push(`${swNames[j]}软件版本号: ${swVersion.toString(16).padStart(6, '0')}`);
+                pos += 6;
+            }
+        }
+
+        // END (1 byte)
+        const end = parseInt(packet.slice(pos, pos + 2), 16);
+        if (end !== 0x55) return '错误：无效的帧尾';
+        result.push(`帧尾: 0x${end.toString(16).padStart(2, '0')}`);
+        pos += 2;
+
+        // CRC (4 bytes)
+        const crc = parseInt(packet.slice(pos, pos + 8), 16);
+        result.push(`CRC校验: 0x${crc.toString(16).padStart(8, '0')}`);
+        pos += 8;
+
+        // 检查多余字节
+        if (pos < packet.length) {
+            result.push(`警告：报文末尾有多余数据：${packet.slice(pos)}`);
+        }
+
+        return result.join('<br>');
+    }
+
+    // 事件监听
+    document.getElementById('parseButton').addEventListener('click', () => {
+        let packet = document.getElementById('packetInput').value.trim().toUpperCase();
+        const errorDiv = document.getElementById('error');
+        const resultDiv = document.getElementById('result');
+        const resultContent = document.getElementById('resultContent');
+
+        // 去除空格
+        packet = packet.replace(/\s+/g, '');
+
+        // 验证输入
+        if (!/^[0-9A-F]+$/.test(packet)) {
+            errorDiv.textContent = '请输入有效的十六进制字符串（仅包含0-9和A-F）！';
+            errorDiv.classList.remove('hidden');
+            resultDiv.classList.add('hidden');
+            return;
+        }
+
+        // 清除错误提示
+        errorDiv.textContent = '';
+        errorDiv.classList.add('hidden');
+
+        // 解析报文
+        resultContent.innerHTML = parsePacket(packet);
+        resultDiv.classList.remove('hidden');
+    });
+</script>
+</body>
+</html>
