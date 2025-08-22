@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZCM到BiIOM报文解析</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -62,20 +63,23 @@
         .warning {
             color: orange;
         }
+        .table {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 <h1>ZCM到BiIOM报文解析</h1>
 <div class="container">
     <label for="biIOMType">选择BiIOM类型:</label>
-    <select id="biIOMType">
+    <select id="biIOMType" class="form-select">
         <option value="self">自研BiIOM</option>
         <option value="other">其他厂商BiIOM</option>
     </select>
     <br>
     <label for="inputHex">请输入十六进制报文（可含空格）:</label>
-    <textarea id="inputHex" placeholder="请输入十六进制报文，例如: AA 00 20 20 23 01 01 12 00 00..."></textarea>
-    <button onclick="parseMessage()">解析报文</button>
+    <textarea id="inputHex" class="form-control" placeholder="请输入十六进制报文，例如: AA 00 20 20 23 01 01 12 00 00..."></textarea>
+    <button onclick="parseMessage()" class="btn btn-primary">解析报文</button>
     <div id="output"></div>
 </div>
 
@@ -112,14 +116,14 @@
 
     function parseComStatAppendixB(comStat) {
         const bits = [
-            { bit: 0, desc: '本端A系经A网与对方A系通信状态' },
-            { bit: 1, desc: '本端A系经B网与对方A系通信状态' },
-            { bit: 2, desc: '本端A系经A网与对方B系通信状态' },
-            { bit: 3, desc: '本端A系经B网与对方B系通信状态' },
-            { bit: 4, desc: '本端B系经A网与对方A系通信状态' },
-            { bit: 5, desc: '本端B系经B网与对方A系通信状态' },
-            { bit: 6, desc: '本端B系经A网与对方B系通信状态' },
-            { bit: 7, desc: '本端B系经B网与对方B系通信状态' }
+            { bit: 0, desc: '本端A系经A网与对方A系' },
+            { bit: 1, desc: '本端A系经B网与对方A系' },
+            { bit: 2, desc: '本端A系经A网与对方B系' },
+            { bit: 3, desc: '本端A系经B网与对方B系' },
+            { bit: 4, desc: '本端B系经A网与对方A系' },
+            { bit: 5, desc: '本端B系经B网与对方A系' },
+            { bit: 6, desc: '本端B系经A网与对方B系' },
+            { bit: 7, desc: '本端B系经B网与对方B系' }
         ];
         let result = `0x${comStat.toString(16).padStart(2, '0')} (`;
         const states = bits.map(b => {
@@ -132,21 +136,38 @@
 
     function parseZcAtsComAppendixC(comStat) {
         const bits = [
-            { bit: 0, desc: '本端A系经A网与对端通信状态' },
-            { bit: 1, desc: '本端A系经B网与对端通信状态' },
-            { bit: 4, desc: '本端B系经A网与对端通信状态' },
-            { bit: 5, desc: '本端B系经B网与对端通信状态' }
+            { bit: 0, desc: '本端A系经A网与对端' },
+            { bit: 1, desc: '本端A系经B网与对端' },
+            { bit: 4, desc: '本端B系经A网与对端' },
+            { bit: 5, desc: '本端B系经B网与对端' }
         ];
         let result = `0x${comStat.toString(16).padStart(2, '0')} (`;
         const states = bits.map(b => {
             const state = (comStat >> b.bit) & 1;
             return `${b.desc}: ${state === 0 ? '正常' : '故障'}`;
         });
-        // 验证第2、3、6、7位是否为1
         const reservedBits = [2, 3, 6, 7];
         const invalidReserved = reservedBits.some(bit => ((comStat >> bit) & 1) !== 1);
         result += states.join(', ') + (invalidReserved ? ', 预留位错误' : '') + ')';
         return result;
+    }
+
+    function createTable(headers, rows, title) {
+        if (rows.length === 0) return `<h5>${title}</h5><p>无数据</p>`;
+        let table = `<h5>${title}</h5><table class="table table-striped table-bordered"><thead><tr>`;
+        headers.forEach(header => {
+            table += `<th>${header}</th>`;
+        });
+        table += `</tr></thead><tbody>`;
+        rows.forEach(row => {
+            table += `<tr>`;
+            row.forEach(cell => {
+                table += `<td>${cell}</td>`;
+            });
+            table += `</tr>`;
+        });
+        table += `</tbody></table>`;
+        return table;
     }
 
     function parseZcmMessage(bytes, isSelfDevelopedBiIOM) {
@@ -167,8 +188,8 @@
         output += `Len: ${len} (帧长度)\n`;
         pos += 2;
 
-        // 验证报文长度，记录警告但不抛出错误
-        const expectedTotalLength = len + 3; // Header (1) + Len (2) + Len字段指定的长度
+        // 验证报文长度
+        const expectedTotalLength = len + 3;
         if (bytes.length < expectedTotalLength) {
             warning = `<span class="warning">警告：报文实际长度(${bytes.length}字节)小于预期长度(${expectedTotalLength}字节)，可能报文不完整</span>\n`;
         } else if (bytes.length > expectedTotalLength) {
@@ -214,13 +235,13 @@
 
         // 8. DevStat (N bytes)
         if (pos + devNum - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少DevStat</span>';
-        output += `DevStat: [`;
+        const devStatRows = [];
         for (let i = 0; i < devNum; i++) {
             const stat = bytes[pos + i];
             const statText = stat === 0xAA ? '正常' : stat === 0xFF ? '故障' : `预留(0x${stat.toString(16).padStart(2, '0')})`;
-            output += `0x${stat.toString(16).padStart(2, '0')} (${statText})${i < devNum - 1 ? ', ' : ''}`;
+            devStatRows.push([i + 1, `0x${stat.toString(16).padStart(2, '0')}`, statText]);
         }
-        output += `] (设备状态)\n`;
+        output += createTable(['设备索引', '值', '状态'], devStatRows, '设备状态 (DevStat)');
         pos += devNum;
 
         // 9. HostStyle (1 byte)
@@ -271,16 +292,16 @@
 
         // 13. CbiInfo (5*N1 bytes)
         if (pos + zcCbiNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少CbiInfo</span>';
-        output += `CbiInfo: [\n`;
+        const cbiInfoRows = [];
         for (let i = 0; i < zcCbiNum; i++) {
             const cbiId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
             const comStat = bytes[pos + 4];
             const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
                 (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : comStat === 0x33 ? '未知' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
-            output += `  { CbiId: ${cbiId}, ComStat: ${comStatText} }\n`;
+            cbiInfoRows.push([cbiId, `0x${comStat.toString(16).padStart(2, '0')}`, comStatText]);
             pos += 5;
         }
-        output += `]\n`;
+        output += createTable(['CBI ID', 'ComStat值', '通信状态'], cbiInfoRows, 'CBI信息 (CbiInfo)');
 
         // 14. ZcZcNum (1 byte)
         if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcZcNum</span>';
@@ -290,16 +311,16 @@
 
         // 15. ZcInfo (5*N2 bytes)
         if (pos + zcZcNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcInfo</span>';
-        output += `ZcInfo: [\n`;
+        const zcInfoRows = [];
         for (let i = 0; i < zcZcNum; i++) {
             const zcId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
             const comStat = bytes[pos + 4];
             const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
                 (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : comStat === 0x33 ? '未知' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
-            output += `  { ZcId: ${zcId}, ComStat: ${comStatText} }\n`;
+            zcInfoRows.push([zcId, `0x${comStat.toString(16).padStart(2, '0')}`, comStatText]);
             pos += 5;
         }
-        output += `]\n`;
+        output += createTable(['相邻ZC ID', 'ComStat值', '通信状态'], zcInfoRows, '相邻ZC信息 (ZcInfo)');
 
         // 16. VoteStatus_A (1 byte)
         if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VoteStatus_A</span>';
@@ -340,7 +361,7 @@
 
         // 24. AxleSegInfo (5*N3 bytes)
         if (pos + axleSegNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少AxleSegInfo</span>';
-        output += `AxleSegInfo: [\n`;
+        const axleSegInfoRows = [];
         for (let i = 0; i < axleSegNum; i++) {
             const axleSegId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
             const axleSegStat = bytes[pos + 4];
@@ -349,10 +370,10 @@
                     axleSegStat === 0x11 ? '区段占用未确认' :
                         axleSegStat === 0x22 ? '区段占用已确认' :
                             axleSegStat === 0x44 ? '区段出清' : '预留';
-            output += `  { AxleSegId: ${axleSegId}, AxleSegStat: 0x${axleSegStat.toString(16).padStart(2, '0')} (${axleSegStatText}) }\n`;
+            axleSegInfoRows.push([axleSegId, `0x${axleSegStat.toString(16).padStart(2, '0')}`, axleSegStatText]);
             pos += 5;
         }
-        output += `]\n`;
+        output += createTable(['计轴区段ID', '状态值', '状态'], axleSegInfoRows, '计轴区段信息 (AxleSegInfo)');
 
         // 25. TrainNum (1 byte)
         if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少TrainNum</span>';
@@ -362,53 +383,61 @@
 
         // 26. CcInfo (5*N4 bytes)
         if (pos + trainNum * 5 - 1 >= bytes.length && trainNum > 0) return output + warning + '<span class="error">报文过短，缺少CcInfo</span>';
-        output += `CcInfo: [\n`;
+        const ccInfoRows = [];
         for (let i = 0; i < trainNum; i++) {
             const ccId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
             const comStat = bytes[pos + 4];
             const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
                 (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
-            output += `  { CcId: ${ccId}, ComStat: ${comStatText} }\n`;
+            ccInfoRows.push([ccId, `0x${comStat.toString(16).padStart(2, '0')}`, comStatText]);
             pos += 5;
         }
-        output += `]\n`;
+        output += createTable(['列车ID', 'ComStat值', '通信状态'], ccInfoRows, '列车信息 (CcInfo)');
 
         // 私有字段（仅自研BiIOM需要）
         if (isSelfDevelopedBiIOM) {
             // 27. VIBState (4 bytes)
             if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VIBState</span>';
-            output += `VIBState: [`;
-            for (let i = 0; i < 4; i++) {
-                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
-            }
-            output += `] (A系输入: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系输入: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            const vibStateRows = [
+                ['A系输入1', `0x${bytes[pos].toString(16).padStart(2, '0')}`],
+                ['A系输入2', `0x${bytes[pos + 1].toString(16).padStart(2, '0')}`],
+                ['B系输入1', `0x${bytes[pos + 2].toString(16).padStart(2, '0')}`],
+                ['B系输入2', `0x${bytes[pos + 3].toString(16).padStart(2, '0')}`]
+            ];
+            output += createTable(['字段', '值'], vibStateRows, '输入状态 (VIBState)');
             pos += 4;
 
             // 28. VOBState (4 bytes)
             if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VOBState</span>';
-            output += `VOBState: [`;
-            for (let i = 0; i < 4; i++) {
-                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
-            }
-            output += `] (A系输出/回采: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系输出/回采: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            const vobStateRows = [
+                ['A系输出/回采1', `0x${bytes[pos].toString(16).padStart(2, '0')}`],
+                ['A系输出/回采2', `0x${bytes[pos + 1].toString(16).padStart(2, '0')}`],
+                ['B系输出/回采1', `0x${bytes[pos + 2].toString(16).padStart(2, '0')}`],
+                ['B系输出/回采2', `0x${bytes[pos + 3].toString(16).padStart(2, '0')}`]
+            ];
+            output += createTable(['字段', '值'], vobStateRows, '输出/回采状态 (VOBState)');
             pos += 4;
 
             // 29. VIBAlarm (4 bytes)
             if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VIBAlarm</span>';
-            output += `VIBAlarm: [`;
-            for (let i = 0; i < 4; i++) {
-                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
-            }
-            output += `] (A系报警: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系报警: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            const vibAlarmRows = [
+                ['A系报警1', `0x${bytes[pos].toString(16).padStart(2, '0')}`],
+                ['A系报警2', `0x${bytes[pos + 1].toString(16).padStart(2, '0')}`],
+                ['B系报警1', `0x${bytes[pos + 2].toString(16).padStart(2, '0')}`],
+                ['B系报警2', `0x${bytes[pos + 3].toString(16).padStart(2, '0')}`]
+            ];
+            output += createTable(['字段', '值'], vibAlarmRows, '输入报警 (VIBAlarm)');
             pos += 4;
 
             // 30. VOBAlarm (4 bytes)
             if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VOBAlarm</span>';
-            output += `VOBAlarm: [`;
-            for (let i = 0; i < 4; i++) {
-                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
-            }
-            output += `] (A系输出/回采报警: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系输出/回采报警: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            const vobAlarmRows = [
+                ['A系输出/回采报警1', `0x${bytes[pos].toString(16).padStart(2, '0')}`],
+                ['A系输出/回采报警2', `0x${bytes[pos + 1].toString(16).padStart(2, '0')}`],
+                ['B系输出/回采报警1', `0x${bytes[pos + 2].toString(16).padStart(2, '0')}`],
+                ['B系输出/回采报警2', `0x${bytes[pos + 3].toString(16).padStart(2, '0')}`]
+            ];
+            output += createTable(['字段', '值'], vobAlarmRows, '输出/回采报警 (VOBAlarm)');
             pos += 4;
 
             // 31. RegFailNum (1 byte)
@@ -419,7 +448,7 @@
 
             // 32. RegFails (5*N5 bytes)
             if (pos + regFailNum * 5 - 1 >= bytes.length && regFailNum > 0) return output + warning + '<span class="error">报文过短，缺少RegFails</span>';
-            output += `RegFails: [\n`;
+            const regFailRows = [];
             const regFailRsnMap = {
                 0x71: '达到控车数量上限',
                 0x72: '到达等待筛选列车数量上限',
@@ -428,10 +457,10 @@
             for (let i = 0; i < regFailNum; i++) {
                 const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
                 const regFailRsn = bytes[pos + 4];
-                output += `  { PVID: ${pvid}, RegFailRsn: 0x${regFailRsn.toString(16).padStart(2, '0')} (${regFailRsnMap[regFailRsn] || '未知'}) }\n`;
+                regFailRows.push([pvid, `0x${regFailRsn.toString(16).padStart(2, '0')}`, regFailRsnMap[regFailRsn] || '未知']);
                 pos += 5;
             }
-            output += `]\n`;
+            output += createTable(['PVID', '原因值', '失败原因'], regFailRows, '注册失败列车 (RegFails)');
 
             // 33. RegAbrNum (1 byte)
             if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少RegAbrNum</span>';
@@ -441,7 +470,7 @@
 
             // 34. RegAbrs (5*N6 bytes)
             if (pos + regAbrNum * 5 - 1 >= bytes.length && regAbrNum > 0) return output + warning + '<span class="error">报文过短，缺少RegAbrs</span>';
-            output += `RegAbrs: [\n`;
+            const regAbrRows = [];
             const regAbrRsnMap = {
                 0x76: '接口协议版本错误',
                 0x77: '接口数据版本错误',
@@ -450,10 +479,10 @@
             for (let i = 0; i < regAbrNum; i++) {
                 const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
                 const regAbrRsn = bytes[pos + 4];
-                output += `  { PVID: ${pvid}, RegAbrRsn: 0x${regAbrRsn.toString(16).padStart(2, '0')} (${regAbrRsnMap[regAbrRsn] || '未知'}) }\n`;
+                regAbrRows.push([pvid, `0x${regAbrRsn.toString(16).padStart(2, '0')}`, regAbrRsnMap[regAbrRsn] || '未知']);
                 pos += 5;
             }
-            output += `]\n`;
+            output += createTable(['PVID', '原因值', '异常原因'], regAbrRows, '异常注册列车 (RegAbrs)');
 
             // 35. WSAbrNum (1 byte)
             if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少WSAbrNum</span>';
@@ -463,7 +492,7 @@
 
             // 36. WSAbrs (5*N7 bytes)
             if (pos + wsAbrNum * 5 - 1 >= bytes.length && wsAbrNum > 0) return output + warning + '<span class="error">报文过短，缺少WSAbrs</span>';
-            output += `WSAbrs: [\n`;
+            const wsAbrRows = [];
             const wsAbrRsnMap = {
                 0x74: '非休眠列车以唤醒方式注册',
                 0x75: '列车异常休眠注销'
@@ -471,10 +500,10 @@
             for (let i = 0; i < wsAbrNum; i++) {
                 const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
                 const wsAbrRsn = bytes[pos + 4];
-                output += `  { PVID: ${pvid}, WSAbrRsn: 0x${wsAbrRsn.toString(16).padStart(2, '0')} (${wsAbrRsnMap[wsAbrRsn] || '未知'}) }\n`;
+                wsAbrRows.push([pvid, `0x${wsAbrRsn.toString(16).padStart(2, '0')}`, wsAbrRsnMap[wsAbrRsn] || '未知']);
                 pos += 5;
             }
-            output += `]\n`;
+            output += createTable(['PVID', '原因值', '异常原因'], wsAbrRows, '唤醒休眠异常列车 (WSAbrs)');
         }
 
         // 37. SyncStatus (1 byte)
