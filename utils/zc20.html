@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZCM到BiIOM报文解析</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        select {
+            padding: 5px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #fafafa;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .error {
+            color: red;
+        }
+        .warning {
+            color: orange;
+        }
+    </style>
+</head>
+<body>
+<h1>ZCM到BiIOM报文解析</h1>
+<div class="container">
+    <label for="biIOMType">选择BiIOM类型:</label>
+    <select id="biIOMType">
+        <option value="self">自研BiIOM</option>
+        <option value="other">其他厂商BiIOM</option>
+    </select>
+    <br>
+    <label for="inputHex">请输入十六进制报文（可含空格）:</label>
+    <textarea id="inputHex" placeholder="请输入十六进制报文，例如: AA 00 20 20 23 01 01 12 00 00..."></textarea>
+    <button onclick="parseMessage()">解析报文</button>
+    <div id="output"></div>
+</div>
+
+<script>
+    function parseMessage() {
+        const input = document.getElementById('inputHex').value.trim();
+        const biIOMType = document.getElementById('biIOMType').value;
+        const isSelfDevelopedBiIOM = biIOMType === 'self';
+        const output = document.getElementById('output');
+        output.innerHTML = '';
+
+        // 去除输入中的空格
+        const cleanedInput = input.replace(/\s+/g, '');
+
+        // 验证输入是否为有效的十六进制字符串
+        if (!/^[0-9A-Fa-f]+$/.test(cleanedInput) || cleanedInput.length % 2 !== 0) {
+            output.innerHTML = '<span class="error">错误：请输入有效的十六进制字符串（去除空格后长度需为偶数）。</span>';
+            return;
+        }
+
+        // 将十六进制字符串转换为字节数组
+        const bytes = [];
+        for (let i = 0; i < cleanedInput.length; i += 2) {
+            bytes.push(parseInt(cleanedInput.substr(i, 2), 16));
+        }
+
+        try {
+            const result = parseZcmMessage(bytes, isSelfDevelopedBiIOM);
+            output.innerHTML = result;
+        } catch (e) {
+            output.innerHTML = `<span class="error">解析错误：${e.message}</span>`;
+        }
+    }
+
+    function parseComStatAppendixB(comStat) {
+        const bits = [
+            { bit: 0, desc: '本端A系经A网与对方A系通信状态' },
+            { bit: 1, desc: '本端A系经B网与对方A系通信状态' },
+            { bit: 2, desc: '本端A系经A网与对方B系通信状态' },
+            { bit: 3, desc: '本端A系经B网与对方B系通信状态' },
+            { bit: 4, desc: '本端B系经A网与对方A系通信状态' },
+            { bit: 5, desc: '本端B系经B网与对方A系通信状态' },
+            { bit: 6, desc: '本端B系经A网与对方B系通信状态' },
+            { bit: 7, desc: '本端B系经B网与对方B系通信状态' }
+        ];
+        let result = `0x${comStat.toString(16).padStart(2, '0')} (`;
+        const states = bits.map(b => {
+            const state = (comStat >> b.bit) & 1;
+            return `${b.desc}: ${state === 0 ? '正常' : '故障'}`;
+        });
+        result += states.join(', ') + ')';
+        return result;
+    }
+
+    function parseZcAtsComAppendixC(comStat) {
+        const bits = [
+            { bit: 0, desc: '本端A系经A网与对端通信状态' },
+            { bit: 1, desc: '本端A系经B网与对端通信状态' },
+            { bit: 4, desc: '本端B系经A网与对端通信状态' },
+            { bit: 5, desc: '本端B系经B网与对端通信状态' }
+        ];
+        let result = `0x${comStat.toString(16).padStart(2, '0')} (`;
+        const states = bits.map(b => {
+            const state = (comStat >> b.bit) & 1;
+            return `${b.desc}: ${state === 0 ? '正常' : '故障'}`;
+        });
+        // 验证第2、3、6、7位是否为1
+        const reservedBits = [2, 3, 6, 7];
+        const invalidReserved = reservedBits.some(bit => ((comStat >> bit) & 1) !== 1);
+        result += states.join(', ') + (invalidReserved ? ', 预留位错误' : '') + ')';
+        return result;
+    }
+
+    function parseZcmMessage(bytes, isSelfDevelopedBiIOM) {
+        let pos = 0;
+        let output = '';
+        let warning = '';
+
+        // 1. Header (1 byte)
+        if (pos >= bytes.length || bytes[pos] !== 0xAA) {
+            throw new Error('帧开始标志不正确，应为0xAA');
+        }
+        output += `Header: 0x${bytes[pos].toString(16).padStart(2, '0')} (帧开始标志)\n`;
+        pos++;
+
+        // 2. Len (2 bytes)
+        if (pos + 1 >= bytes.length) throw new Error('报文过短，缺少Len字段');
+        const len = (bytes[pos] << 8) | bytes[pos + 1];
+        output += `Len: ${len} (帧长度)\n`;
+        pos += 2;
+
+        // 验证报文长度，记录警告但不抛出错误
+        const expectedTotalLength = len + 3; // Header (1) + Len (2) + Len字段指定的长度
+        if (bytes.length < expectedTotalLength) {
+            warning = `<span class="warning">警告：报文实际长度(${bytes.length}字节)小于预期长度(${expectedTotalLength}字节)，可能报文不完整</span>\n`;
+        } else if (bytes.length > expectedTotalLength) {
+            warning = `<span class="warning">警告：报文实际长度(${bytes.length}字节)大于预期长度(${expectedTotalLength}字节)，可能包含额外数据</span>\n`;
+        }
+
+        // 3. MsgId (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少MsgId</span>';
+        if (bytes[pos] !== 0x20) {
+            throw new Error('消息ID不正确，应为0x20');
+        }
+        output += `MsgId: 0x${bytes[pos].toString(16).padStart(2, '0')} (消息ID)\n`;
+        pos++;
+
+        // 4. TimeStamp (6 bytes)
+        if (pos + 5 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少TimeStamp</span>';
+        const year = bytes[pos] + 2000;
+        const month = bytes[pos + 1];
+        const day = bytes[pos + 2];
+        const hour = bytes[pos + 3];
+        const minute = bytes[pos + 4];
+        const second = bytes[pos + 5];
+        output += `TimeStamp: ${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')} (北京时间)\n`;
+        pos += 6;
+
+        // 5. ZcId (4 bytes)
+        if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcId</span>';
+        const zcId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+        output += `ZcId: ${zcId} (ZC编号)\n`;
+        pos += 4;
+
+        // 6. Sn (4 bytes)
+        if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少Sn</span>';
+        const sn = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+        output += `Sn: ${sn} (报文序列号)\n`;
+        pos += 4;
+
+        // 7. DevNum (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少DevNum</span>';
+        const devNum = bytes[pos];
+        output += `DevNum: ${devNum} (设备固件数量)\n`;
+        pos++;
+
+        // 8. DevStat (N bytes)
+        if (pos + devNum - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少DevStat</span>';
+        output += `DevStat: [`;
+        for (let i = 0; i < devNum; i++) {
+            const stat = bytes[pos + i];
+            const statText = stat === 0xAA ? '正常' : stat === 0xFF ? '故障' : `预留(0x${stat.toString(16).padStart(2, '0')})`;
+            output += `0x${stat.toString(16).padStart(2, '0')} (${statText})${i < devNum - 1 ? ', ' : ''}`;
+        }
+        output += `] (设备状态)\n`;
+        pos += devNum;
+
+        // 9. HostStyle (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少HostStyle</span>';
+        const hostStyle = bytes[pos];
+        const hostStyleMap = {
+            0xAA: 'A系主用、B系备用',
+            0x55: 'A系备用、B系主用',
+            0x66: 'A系备用、B系备用',
+            0x77: 'A系主用、B系故障',
+            0x99: 'A系故障、B系主用',
+            0xBB: 'A系备用、B系故障',
+            0xCC: 'A系故障、B系备用',
+            0xFF: '双机故障'
+        };
+        output += `HostStyle: 0x${hostStyle.toString(16).padStart(2, '0')} (${hostStyleMap[hostStyle] || '预留'})\n`;
+        if (hostStyle !== 0xAA && hostStyle !== 0x55) {
+            output += `<span class="warning">警告：主备同步异常 (HostStyle = 0x${hostStyle.toString(16).padStart(2, '0')})</span>\n`;
+        }
+        pos++;
+
+        // 10. ZcDsuCom (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcDsuCom</span>';
+        const zcDsuCom = bytes[pos];
+        output += `ZcDsuCom: 0x${zcDsuCom.toString(16).padStart(2, '0')} (${zcDsuCom === 0xFF ? '无DSU' : '未知'})\n`;
+        pos++;
+
+        // 11. ZcAtsCom (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcAtsCom</span>';
+        const zcAtsCom = bytes[pos];
+        if (isSelfDevelopedBiIOM) {
+            output += `ZcAtsCom: ${parseZcAtsComAppendixC(zcAtsCom)}\n`;
+        } else {
+            const zcAtsComMap = {
+                0xAA: '正常',
+                0x55: '异常',
+                0x33: '未知'
+            };
+            output += `ZcAtsCom: 0x${zcAtsCom.toString(16).padStart(2, '0')} (${zcAtsComMap[zcAtsCom] || '预留'})\n`;
+        }
+        pos++;
+
+        // 12. ZcCbiNum (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcCbiNum</span>';
+        const zcCbiNum = bytes[pos];
+        output += `ZcCbiNum: ${zcCbiNum} (CBI数量)\n`;
+        pos++;
+
+        // 13. CbiInfo (5*N1 bytes)
+        if (pos + zcCbiNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少CbiInfo</span>';
+        output += `CbiInfo: [\n`;
+        for (let i = 0; i < zcCbiNum; i++) {
+            const cbiId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const comStat = bytes[pos + 4];
+            const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
+                (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : comStat === 0x33 ? '未知' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
+            output += `  { CbiId: ${cbiId}, ComStat: ${comStatText} }\n`;
+            pos += 5;
+        }
+        output += `]\n`;
+
+        // 14. ZcZcNum (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcZcNum</span>';
+        const zcZcNum = bytes[pos];
+        output += `ZcZcNum: ${zcZcNum} (相邻ZC数量)\n`;
+        pos++;
+
+        // 15. ZcInfo (5*N2 bytes)
+        if (pos + zcZcNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcInfo</span>';
+        output += `ZcInfo: [\n`;
+        for (let i = 0; i < zcZcNum; i++) {
+            const zcId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const comStat = bytes[pos + 4];
+            const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
+                (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : comStat === 0x33 ? '未知' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
+            output += `  { ZcId: ${zcId}, ComStat: ${comStatText} }\n`;
+            pos += 5;
+        }
+        output += `]\n`;
+
+        // 16. VoteStatus_A (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VoteStatus_A</span>';
+        const voteStatusA = bytes[pos];
+        const voteStatusMap = { 0xAA: '一致', 0x55: '不一致', 0x33: '未知' };
+        output += `VoteStatus_A: 0x${voteStatusA.toString(16).padStart(2, '0')} (${voteStatusMap[voteStatusA] || '预留'})\n`;
+        pos++;
+
+        // 17. VoteStatus_B (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VoteStatus_B</span>';
+        const voteStatusB = bytes[pos];
+        output += `VoteStatus_B: 0x${voteStatusB.toString(16).padStart(2, '0')} (${voteStatusMap[voteStatusB] || '预留'})\n`;
+        pos++;
+
+        // 18. SoftNum (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少SoftNum</span>';
+        const softNum = bytes[pos];
+        if (softNum !== 4) {
+            throw new Error('SoftNum应为4');
+        }
+        output += `SoftNum: ${softNum} (软件数量)\n`;
+        pos++;
+
+        // 19-22. Software Versions (4*4 bytes)
+        if (pos + 15 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少版本号</span>';
+        const versions = ['ZcAppVer', 'ZcPltVer', 'ZcCfgVer', 'ZcmVer'];
+        for (let i = 0; i < 4; i++) {
+            const ver = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            output += `${versions[i]}: ${ver} (版本号)\n`;
+            pos += 4;
+        }
+
+        // 23. AxleSegNum (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少AxleSegNum</span>';
+        const axleSegNum = bytes[pos];
+        output += `AxleSegNum: ${axleSegNum} (计轴区段数量)\n`;
+        pos++;
+
+        // 24. AxleSegInfo (5*N3 bytes)
+        if (pos + axleSegNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少AxleSegInfo</span>';
+        output += `AxleSegInfo: [\n`;
+        for (let i = 0; i < axleSegNum; i++) {
+            const axleSegId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const axleSegStat = bytes[pos + 4];
+            const axleSegStatText = axleSegStat === 0xAA ? '正常' :
+                axleSegStat === 0x55 ? '异常' :
+                    axleSegStat === 0x11 ? '区段占用未确认' :
+                        axleSegStat === 0x22 ? '区段占用已确认' :
+                            axleSegStat === 0x44 ? '区段出清' : '预留';
+            output += `  { AxleSegId: ${axleSegId}, AxleSegStat: 0x${axleSegStat.toString(16).padStart(2, '0')} (${axleSegStatText}) }\n`;
+            pos += 5;
+        }
+        output += `]\n`;
+
+        // 25. TrainNum (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少TrainNum</span>';
+        const trainNum = bytes[pos];
+        output += `TrainNum: ${trainNum} (列车数量)\n`;
+        pos++;
+
+        // 26. CcInfo (5*N4 bytes)
+        if (pos + trainNum * 5 - 1 >= bytes.length && trainNum > 0) return output + warning + '<span class="error">报文过短，缺少CcInfo</span>';
+        output += `CcInfo: [\n`;
+        for (let i = 0; i < trainNum; i++) {
+            const ccId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const comStat = bytes[pos + 4];
+            const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
+                (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
+            output += `  { CcId: ${ccId}, ComStat: ${comStatText} }\n`;
+            pos += 5;
+        }
+        output += `]\n`;
+
+        // 私有字段（仅自研BiIOM需要）
+        if (isSelfDevelopedBiIOM) {
+            // 27. VIBState (4 bytes)
+            if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VIBState</span>';
+            output += `VIBState: [`;
+            for (let i = 0; i < 4; i++) {
+                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
+            }
+            output += `] (A系输入: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系输入: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            pos += 4;
+
+            // 28. VOBState (4 bytes)
+            if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VOBState</span>';
+            output += `VOBState: [`;
+            for (let i = 0; i < 4; i++) {
+                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
+            }
+            output += `] (A系输出/回采: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系输出/回采: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            pos += 4;
+
+            // 29. VIBAlarm (4 bytes)
+            if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VIBAlarm</span>';
+            output += `VIBAlarm: [`;
+            for (let i = 0; i < 4; i++) {
+                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
+            }
+            output += `] (A系报警: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系报警: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            pos += 4;
+
+            // 30. VOBAlarm (4 bytes)
+            if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少VOBAlarm</span>';
+            output += `VOBAlarm: [`;
+            for (let i = 0; i < 4; i++) {
+                output += `0x${bytes[pos + i].toString(16).padStart(2, '0')}${i < 3 ? ', ' : ''}`;
+            }
+            output += `] (A系输出/回采报警: [${bytes[pos].toString(16).padStart(2, '0')}, ${bytes[pos + 1].toString(16).padStart(2, '0')}], B系输出/回采报警: [${bytes[pos + 2].toString(16).padStart(2, '0')}, ${bytes[pos + 3].toString(16).padStart(2, '0')}])\n`;
+            pos += 4;
+
+            // 31. RegFailNum (1 byte)
+            if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少RegFailNum</span>';
+            const regFailNum = bytes[pos];
+            output += `RegFailNum: ${regFailNum} (注册失败列车数量)\n`;
+            pos++;
+
+            // 32. RegFails (5*N5 bytes)
+            if (pos + regFailNum * 5 - 1 >= bytes.length && regFailNum > 0) return output + warning + '<span class="error">报文过短，缺少RegFails</span>';
+            output += `RegFails: [\n`;
+            const regFailRsnMap = {
+                0x71: '达到控车数量上限',
+                0x72: '到达等待筛选列车数量上限',
+                0x73: '到达ZC接入设备上限'
+            };
+            for (let i = 0; i < regFailNum; i++) {
+                const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+                const regFailRsn = bytes[pos + 4];
+                output += `  { PVID: ${pvid}, RegFailRsn: 0x${regFailRsn.toString(16).padStart(2, '0')} (${regFailRsnMap[regFailRsn] || '未知'}) }\n`;
+                pos += 5;
+            }
+            output += `]\n`;
+
+            // 33. RegAbrNum (1 byte)
+            if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少RegAbrNum</span>';
+            const regAbrNum = bytes[pos];
+            output += `RegAbrNum: ${regAbrNum} (异常注册列车数量)\n`;
+            pos++;
+
+            // 34. RegAbrs (5*N6 bytes)
+            if (pos + regAbrNum * 5 - 1 >= bytes.length && regAbrNum > 0) return output + warning + '<span class="error">报文过短，缺少RegAbrs</span>';
+            output += `RegAbrs: [\n`;
+            const regAbrRsnMap = {
+                0x76: '接口协议版本错误',
+                0x77: '接口数据版本错误',
+                0x78: '注册列车ID未配置'
+            };
+            for (let i = 0; i < regAbrNum; i++) {
+                const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+                const regAbrRsn = bytes[pos + 4];
+                output += `  { PVID: ${pvid}, RegAbrRsn: 0x${regAbrRsn.toString(16).padStart(2, '0')} (${regAbrRsnMap[regAbrRsn] || '未知'}) }\n`;
+                pos += 5;
+            }
+            output += `]\n`;
+
+            // 35. WSAbrNum (1 byte)
+            if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少WSAbrNum</span>';
+            const wsAbrNum = bytes[pos];
+            output += `WSAbrNum: ${wsAbrNum} (唤醒休眠异常列车数量)\n`;
+            pos++;
+
+            // 36. WSAbrs (5*N7 bytes)
+            if (pos + wsAbrNum * 5 - 1 >= bytes.length && wsAbrNum > 0) return output + warning + '<span class="error">报文过短，缺少WSAbrs</span>';
+            output += `WSAbrs: [\n`;
+            const wsAbrRsnMap = {
+                0x74: '非休眠列车以唤醒方式注册',
+                0x75: '列车异常休眠注销'
+            };
+            for (let i = 0; i < wsAbrNum; i++) {
+                const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+                const wsAbrRsn = bytes[pos + 4];
+                output += `  { PVID: ${pvid}, WSAbrRsn: 0x${wsAbrRsn.toString(16).padStart(2, '0')} (${wsAbrRsnMap[wsAbrRsn] || '未知'}) }\n`;
+                pos += 5;
+            }
+            output += `]\n`;
+        }
+
+        // 37. SyncStatus (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少SyncStatus</span>';
+        const syncStatus = bytes[pos];
+        output += `SyncStatus: 0x${syncStatus.toString(16).padStart(2, '0')} (${syncStatus === 0xAA ? '同步' : syncStatus === 0x55 ? '不同步' : '预留'})\n`;
+        pos++;
+
+        // 38. End (1 byte)
+        if (pos >= bytes.length) return output + warning + '<span class="error">报文过短，缺少End</span>';
+        if (bytes[pos] !== 0x55) {
+            throw new Error('帧结束标志不正确，应为0x55');
+        }
+        output += `End: 0x${bytes[pos].toString(16).padStart(2, '0')} (帧结束标志)\n`;
+        pos++;
+
+        // 39. CRC (4 bytes)
+        if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少CRC</span>';
+        const crc = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+        output += `CRC: 0x${crc.toString(16).padStart(8, '0')} (CRC校验)\n`;
+
+        // 验证长度
+        if (pos + 4 !== bytes.length) {
+            output += `<span class="warning">警告：报文实际长度(${bytes.length}字节)与解析长度(${pos + 4}字节)不匹配，可能包含额外数据</span>\n`;
+        }
+
+        return warning + output;
+    }
+</script>
+</body>
+</html>
