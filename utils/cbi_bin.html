@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>appconf_CBI.bin解析器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/jstree.min.js"></script>
+    <style>
+        #treeView { margin-top: 1rem; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+<div class="container mx-auto p-6">
+    <h1 class="text-3xl font-bold mb-6 text-center">appconf_CBI.bin解析器</h1>
+    <div class="mb-4">
+        <label class="block text-lg font-medium mb-2">上传 .bin 文件</label>
+        <input type="file" id="binFileInput" accept=".bin" class="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4 file:rounded file:border-0
+                file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100">
+    </div>
+    <div id="result" class="bg-white p-6 rounded shadow-md hidden">
+        <h2 class="text-2xl font-semibold mb-4">解析结果</h2>
+        <div class="flex space-x-4 mb-4">
+            <button id="expandAll" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">全部展开</button>
+            <button id="collapseAll" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">全部收起</button>
+        </div>
+        <div id="error" class="text-red-600 mb-4 hidden"></div>
+        <div id="treeView"></div>
+    </div>
+</div>
+
+<script>
+    // 工具函数：从 ArrayBuffer 读取指定类型的值，包含边界检查
+    function getUint8(buffer, offset, errorCallback) {
+        if (offset >= buffer.byteLength) {
+            errorCallback(`Offset ${offset} exceeds buffer length ${buffer.byteLength}`);
+            throw new RangeError(`Offset ${offset} out of bounds`);
+        }
+        return new DataView(buffer).getUint8(offset);
+    }
+
+    function getUint16(buffer, offset, errorCallback) {
+        if (offset + 1 >= buffer.byteLength) {
+            errorCallback(`Offset ${offset} exceeds buffer length ${buffer.byteLength} for Uint16`);
+            throw new RangeError(`Offset ${offset} out of bounds for Uint16`);
+        }
+        return new DataView(buffer).getUint16(offset, false); // 大端序
+    }
+
+    function getUint32(buffer, offset, errorCallback) {
+        if (offset + 3 >= buffer.byteLength) {
+            errorCallback(`Offset ${offset} exceeds buffer length ${buffer.byteLength} for Uint32`);
+            throw new RangeError(`Offset ${offset} out of bounds for Uint32`);
+        }
+        return new DataView(buffer).getUint32(offset, false); // 大端序
+    }
+
+    function readString(buffer, offset, length, errorCallback) {
+        if (offset + length > buffer.byteLength) {
+            errorCallback(`Offset ${offset} + length ${length} exceeds buffer length ${buffer.byteLength}`);
+            throw new RangeError(`Offset ${offset} + length ${length} out of bounds`);
+        }
+        let chars = [];
+        for (let i = 0; i < length; i++) {
+            chars.push(String.fromCharCode(getUint8(buffer, offset + i, errorCallback)));
+        }
+        return chars.join('');
+    }
+
+    // 解析标志
+    function decodeFlags(value) {
+        const flags = [];
+        if (value > 512) return flags;
+        const hexStr = value.toString(16).padStart(4, '0');
+        const flagMap = {
+            0x0000: "NA",
+            0x0001: "IO_INPUT",
+            0x0002: "IO_OUTPUT",
+            0x0004: "COMM_INPUT",
+            0x0008: "COMM_OUTPUT",
+            0x0010: "INTERMEDIATE",
+            0x0020: "SELF_HOLDING",
+            0x0040: "TIME",
+            0x0080: "SYNC_INPUT",
+            0x0100: "SYNC_OUTPUT",
+            0x0200: "SYSTEM"
+        };
+        for (let i = 0; i < 4; i++) {
+            const hexDigit = parseInt(hexStr[i], 16);
+            const shiftedValue = hexDigit << (4 * (3 - i));
+            if (shiftedValue !== 0 && flagMap[shiftedValue]) {
+                flags.push(flagMap[shiftedValue]);
+            }
+        }
+        return flags;
+    }
+
+    // BinParse 类
+    class BinParse {
+        constructor(buffer) {
+            this.buffer = buffer;
+            this.varNameVec = [];
+            this.logicValues = [];
+            this.cageMap = new Map();
+            this.mapNameMapPeer = new Map();
+            this.hasJZPeer = false;
+            this.toolVersion = '';
+            this.cbiVersion = '';
+            this.controllerVersion = '';
+            this.errors = [];
+        }
+
+        error(msg) {
+            this.errors.push(msg);
+        }
+
+        readVersion() {
+            try {
+                const len = getUint8(this.buffer, 0, this.error.bind(this));
+                return readString(this.buffer, 1, len, this.error.bind(this));
+            } catch (e) {
+                this.error(`读取版本失败: ${e.message}`);
+                return '';
+            }
+        }
+
+        readCbiVersion() {
+            try {
+                let offset = 0x25;
+                const cbiLen = getUint8(this.buffer, offset, this.error.bind(this));
+                this.cbiVersion = readString(this.buffer, offset + 1, cbiLen, this.error.bind(this));
+                offset = 0x3C;
+                const controllerLen = getUint8(this.buffer, offset, this.error.bind(this));
+                this.controllerVersion = readString(this.buffer, offset + 1, controllerLen, this.error.bind(this));
+            } catch (e) {
+                this.error(`读取CBI版本失败: ${e.message}`);
+            }
+        }
+
+        readVar(offset) {
+            try {
+                let pos = offset;
+                const varAddr = getUint32(this.buffer, pos, this.error.bind(this));
+                const varLen = getUint32(this.buffer, pos + 4, this.error.bind(this));
+                if (varAddr + varLen > this.buffer.byteLength) {
+                    this.error(`变量区偏移 ${varAddr} + 长度 ${varLen} 超出缓冲区`);
+                    return;
+                }
+                pos = varAddr;
+                const itemLen = getUint16(this.buffer, pos, this.error.bind(this));
+                pos += 2;
+                let indexNum = 0;
+                for (let i = 0; i < itemLen && pos < this.buffer.byteLength; i++) {
+                    const signalType = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2;
+                    const nameLen = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 1;
+                    const varName = readString(this.buffer, pos, nameLen, this.error.bind(this));
+                    pos += nameLen;
+                    this.varNameVec.push(varName);
+                    this.logicValues.push({
+                        name: varName,
+                        index: indexNum,
+                        type: signalType,
+                        flags: decodeFlags(signalType),
+                        typeName: 'CombitVar'
+                    });
+                    indexNum++;
+                }
+                if (pos + 2 <= this.buffer.byteLength) {
+                    const timeLen = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2;
+                    for (let i = 0; i < timeLen && pos + 4 <= this.buffer.byteLength; i++) {
+                        pos += 2; // duration
+                        const signalNum = getUint16(this.buffer, pos, this.error.bind(this));
+                        pos += 2;
+                        pos += 2 * signalNum; // 跳过信号索引
+                    }
+                }
+            } catch (e) {
+                this.error(`读取变量区失败: ${e.message}`);
+            }
+        }
+
+        readCage(offset) {
+            try {
+                let pos = offset;
+                const varAddr = getUint32(this.buffer, pos, this.error.bind(this));
+                const varLen = getUint32(this.buffer, pos + 4, this.error.bind(this));
+                if (varAddr + varLen > this.buffer.byteLength) {
+                    this.error(`机笼区偏移 ${varAddr} + 长度 ${varLen} 超出缓冲区`);
+                    return;
+                }
+                pos = varAddr;
+                const itemLen = getUint16(this.buffer, pos, this.error.bind(this));
+                pos += 2;
+                for (let i = 0; i < itemLen && pos < this.buffer.byteLength; i++) {
+                    const cageAddress = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 11;
+                    const boardNum = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 1;
+                    const slots = [];
+                    for (let j = 0; j < boardNum && pos < this.buffer.byteLength; j++) {
+                        const slotType = getUint8(this.buffer, pos, this.error.bind(this));
+                        pos += 1;
+                        let boardType;
+                        switch (slotType) {
+                            case 0x55: boardType = "VI"; break;
+                            case 0xAA: boardType = "VO"; break;
+                            case 0x5A: boardType = "SIG"; break;
+                            case 0x6A: boardType = "RLB"; break;
+                            case 0xA5: boardType = "WST5"; break;
+                            case 0xA6: boardType = "WST4"; break;
+                            case 0x7A: boardType = "EIB"; break;
+                            case 0x8A: boardType = "EOB"; break;
+                            case 0x9A: boardType = "NEOB"; break;
+                            default: boardType = "UNKNOWN";
+                        }
+                        const board = { type: boardType, bits: [], voBits: [], needVoBits: [], typeName: 'ImportBoard' };
+                        if ([0x55, 0xAA, 0x5A, 0x6A, 0x7A, 0x8A, 0x9A].includes(slotType)) {
+                            const signalLen = getUint8(this.buffer, pos, this.error.bind(this));
+                            pos += 1;
+                            for (let k = 0; k < signalLen && pos + 2 <= this.buffer.byteLength; k++) {
+                                const varIdx = getUint16(this.buffer, pos, this.error.bind(this));
+                                board.bits.push(this.varNameVec[varIdx] || `Index ${varIdx}`);
+                                pos += 2;
+                            }
+                            const signalVoLen = getUint8(this.buffer, pos, this.error.bind(this));
+                            pos += 1;
+                            for (let k = 0; k < signalVoLen && pos + 2 <= this.buffer.byteLength; k++) {
+                                const varIdx = getUint16(this.buffer, pos, this.error.bind(this));
+                                board.voBits.push(this.varNameVec[varIdx] || `Index ${varIdx}`);
+                                pos += 2;
+                            }
+                            for (let k = 0; k < signalVoLen && pos + 2 <= this.buffer.byteLength; k++) {
+                                const varIdx = getUint16(this.buffer, pos, this.error.bind(this));
+                                board.needVoBits.push(this.varNameVec[varIdx] || `Index ${varIdx}`);
+                                pos += 2;
+                            }
+                            pos += signalVoLen * 2;
+                        } else if ([0xA5, 0xA6].includes(slotType)) {
+                            for (let k = 0; k < 10 && pos + 2 <= this.buffer.byteLength; k++) {
+                                const varIdx = getUint16(this.buffer, pos, this.error.bind(this));
+                                board.bits.push(this.varNameVec[varIdx] || `Index ${varIdx}`);
+                                pos += 2;
+                            }
+                        }
+                        slots.push(board);
+                    }
+                    this.cageMap.set(cageAddress, { address: cageAddress, slots, typeName: 'ImportCage' });
+                    pos += 1;
+                }
+            } catch (e) {
+                this.error(`读取机笼区失败: ${e.message}`);
+            }
+        }
+
+        readPeer(offset) {
+            try {
+                let pos = offset;
+                const varAddr = getUint32(this.buffer, pos, this.error.bind(this));
+                const varLen = getUint32(this.buffer, pos + 4, this.error.bind(this));
+                if (varAddr + varLen > this.buffer.byteLength) {
+                    this.error(`通信链路区偏移 ${varAddr} + 长度 ${varLen} 超出缓冲区`);
+                    return;
+                }
+                pos = varAddr;
+                const itemLen = getUint16(this.buffer, pos, this.error.bind(this));
+                pos += 2;
+                for (let i = 0; i < itemLen && pos < this.buffer.byteLength; i++) {
+                    const nameLen = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 1;
+                    const peerName = readString(this.buffer, pos, nameLen, this.error.bind(this));
+                    pos += nameLen;
+                    if (peerName.includes("JZ")) this.hasJZPeer = true;
+                    const DID = getUint32(this.buffer, pos, this.error.bind(this));
+                    pos += 4;
+                    const SID = getUint32(this.buffer, pos, this.error.bind(this));
+                    pos += 4;
+                    const offsetAdjustment = (offset === 116) ? 6 : (this.toolVersion >= "1.1.17.0" ? 15 : 14);
+                    pos += offsetAdjustment;
+                    const objectKind = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 1;
+                    const vitalData = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 1;
+                    const tdbCrc = getUint32(this.buffer, pos, this.error.bind(this));
+                    pos += 4;
+                    const reEquipID = getUint32(this.buffer, pos, this.error.bind(this));
+                    pos += 4;
+                    const emapCRCIn = getUint32(this.buffer, pos, this.error.bind(this));
+                    pos += 4;
+                    const emapCRCOut = getUint32(this.buffer, pos, this.error.bind(this));
+                    pos += 4;
+                    pos += (offset === 116) ? 10 : 12;
+                    const bmapInCrc = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2;
+                    const bmapOutCrc = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2;
+                    const inputLen = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2;
+                    const inputBits = [];
+                    for (let j = 0; j < inputLen && pos + 2 <= this.buffer.byteLength; j++) {
+                        const idx = getUint16(this.buffer, pos, this.error.bind(this));
+                        inputBits.push(this.varNameVec[idx] || `Index ${idx}`);
+                        pos += 2;
+                    }
+                    const outputLen = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2;
+                    const outputBits = [];
+                    for (let j = 0; j < outputLen && pos + 2 <= this.buffer.byteLength; j++) {
+                        const idx = getUint16(this.buffer, pos, this.error.bind(this));
+                        outputBits.push(this.varNameVec[idx] || `Index ${idx}`);
+                        pos += 2;
+                    }
+                    this.mapNameMapPeer.set(peerName, {
+                        name: peerName,
+                        SID, DID, objectKind, vitalData, tdbCrc,
+                        bmapInCrc, bmapOutCrc, emapCRCIn, emapCRCOut,
+                        senderID: reEquipID, inputBits, outputBits,
+                        typeName: 'Peer'
+                    });
+                    const inputType = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 1 + inputType * 6;
+                    const outputType = getUint8(this.buffer, pos, this.error.bind(this));
+                    pos += 1 + outputType * 6;
+                    const psdNum = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2 + psdNum * 4;
+                    const attrNum = getUint16(this.buffer, pos, this.error.bind(this));
+                    pos += 2;
+                    for (let j = 0; j < attrNum && pos < this.buffer.byteLength; j++) {
+                        pos += 2;
+                        const subAttrNum = getUint16(this.buffer, pos, this.error.bind(this));
+                        pos += 2;
+                        for (let k = 0; k < subAttrNum && pos < this.buffer.byteLength; k++) {
+                            pos += 2;
+                            const subValueNum = getUint16(this.buffer, pos, this.error.bind(this));
+                            pos += 2 + subValueNum * 2;
+                        }
+                    }
+                }
+            } catch (e) {
+                this.error(`读取通信链路区失败: ${e.message}`);
+            }
+        }
+
+        parse() {
+            this.toolVersion = this.readVersion();
+            this.readCbiVersion();
+            this.readVar(0x68);
+            this.readCage(0x68 + 8);
+            this.readPeer(0x68 + 16);
+            return this.errors.length === 0;
+        }
+
+        // 生成 jsTree JSON 数据
+        toJsTreeData() {
+            return {
+                text: 'BinParse',
+                children: [
+                    {
+                        text: '版本信息',
+                        children: [
+                            { text: `ToolVersion: ${this.toolVersion || '未知'}`, state: { opened: false } },
+                            { text: `CbiVersion: ${this.cbiVersion || '未知'}`, state: { opened: false } },
+                            { text: `ControllerVersion: ${this.controllerVersion || '未知'}`, state: { opened: false } },
+                            { text: `HasJZPeer: ${this.hasJZPeer}`, state: { opened: false } }
+                        ],
+                        state: { opened: false }
+                    },
+                    {
+                        text: '逻辑变量 (CombitVar)',
+                        children: this.logicValues.map(v => ({
+                            text: `CombitVar: ${v.name}`,
+                            children: [
+                                { text: `Index: ${v.index}`, state: { opened: false } },
+                                { text: `Type: ${v.type}`, state: { opened: false } },
+                                { text: `Flags: ${v.flags.join(', ') || '无'}`, state: { opened: false } }
+                            ],
+                            state: { opened: false }
+                        })),
+                        state: { opened: false }
+                    },
+                    {
+                        text: '机笼 (ImportCage)',
+                        children: Array.from(this.cageMap).map(([addr, cage]) => ({
+                            text: `ImportCage: Address ${addr}`,
+                            children: [{
+                                text: 'Slots',
+                                children: cage.slots.map(slot => ({
+                                    text: `ImportBoard: ${slot.type}`,
+                                    children: [
+                                        { text: `Bits: ${slot.bits.join(', ') || '无'}`, state: { opened: false } },
+                                        { text: `VoBits: ${slot.voBits.join(', ') || '无'}`, state: { opened: false } },
+                                        { text: `NeedVoBits: ${slot.needVoBits.join(', ') || '无'}`, state: { opened: false } }
+                                    ],
+                                    state: { opened: false }
+                                })),
+                                state: { opened: false }
+                            }],
+                            state: { opened: false }
+                        })),
+                        state: { opened: false }
+                    },
+                    {
+                        text: '通信链路 (Peer)',
+                        children: Array.from(this.mapNameMapPeer).map(([name, peer]) => ({
+                            text: `Peer: ${name}`,
+                            children: [
+                                { text: `SID: ${peer.SID}`, state: { opened: false } },
+                                { text: `DID: ${peer.DID}`, state: { opened: false } },
+                                { text: `ObjectKind: ${peer.objectKind}`, state: { opened: false } },
+                                { text: `VitalData: ${peer.vitalData}`, state: { opened: false } },
+                                { text: `TdbCrc: ${peer.tdbCrc}`, state: { opened: false } },
+                                { text: `BmapInCrc: ${peer.bmapInCrc}`, state: { opened: false } },
+                                { text: `BmapOutCrc: ${peer.bmapOutCrc}`, state: { opened: false } },
+                                { text: `EmapCRCIn: ${peer.emapCRCIn}`, state: { opened: false } },
+                                { text: `EmapCRCOut: ${peer.emapCRCOut}`, state: { opened: false } },
+                                { text: `SenderID: ${peer.senderID}`, state: { opened: false } },
+                                { text: `InputBits: ${peer.inputBits.join(', ') || '无'}`, state: { opened: false } },
+                                { text: `OutputBits: ${peer.outputBits.join(', ') || '无'}`, state: { opened: false } }
+                            ],
+                            state: { opened: false }
+                        })),
+                        state: { opened: false }
+                    }
+                ],
+                state: { opened: false }
+            };
+        }
+    }
+
+    // 显示树状结构
+    function displayTree(parser) {
+        const treeDiv = $('#treeView');
+        const resultDiv = $('#result');
+        resultDiv.removeClass('hidden');
+
+        // 错误信息
+        const errorDiv = $('#error');
+        if (parser.errors.length > 0) {
+            errorDiv.html(`<h3 class="text-lg font-semibold">错误</h3><ul class="list-disc pl-6">${parser.errors.map(e => `<li>${e}</li>`).join('')}</ul>`);
+            errorDiv.removeClass('hidden');
+            return;
+        } else {
+            errorDiv.addClass('hidden');
+        }
+
+        // 初始化 jsTree
+        treeDiv.jstree({
+            'core': {
+                'data': parser.toJsTreeData(),
+                'themes': {
+                    'name': 'default',
+                    'dots': true,
+                    'icons': true
+                }
+            }
+        });
+
+        // 全部展开按钮
+        $('#expandAll').on('click', function() {
+            treeDiv.jstree('open_all');
+        });
+
+        // 全部收起按钮
+        $('#collapseAll').on('click', function() {
+            treeDiv.jstree('close_all');
+        });
+    }
+
+    // 处理文件上传
+    $('#binFileInput').on('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const buffer = e.target.result;
+            const parser = new BinParse(buffer);
+            const success = parser.parse();
+            displayTree(parser);
+        };
+        reader.readAsArrayBuffer(file);
+    });
+</script>
+</body>
+</html>
