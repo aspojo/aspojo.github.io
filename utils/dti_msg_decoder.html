@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BiIOM-DTI 报文解析器</title>
+    <title>2BiIOM-DTI 报文解析器</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -104,6 +104,14 @@
             return;
         }
 
+        // 解析INFO每位的中文解释
+        const infoDetails = infoStr.split('').map((char, index) => {
+            const stateDesc = char === '1' ? '正常' :
+                char === '2' ? '一般错误（DTI显示板出错）' :
+                    char === '3' ? '严重错误（DTI通信出错）' : '未知';
+            return `位${index + 1}: ${char} (${stateDesc})`;
+        }).join('\n');
+
         // 步骤4：提取CHKSUM
         const chksumBytes = bytes.slice(5 + lenid, bytes.length - 1);
         if (chksumBytes.length !== 4) {
@@ -134,6 +142,7 @@
             `LENGTH: ${lengthStr} (LCHKSUM=${lengthStr[0]}, LENID=${lenid})\n` +
             `LCHKSUM验证：${lchksumValid ? '有效' : `无效（应为${calcLchksum.toString(16).toUpperCase()}）`}\n` +
             `INFO: ${infoStr || '无'}\n` +
+            `${infoDetails ? 'INFO详情：\n' + infoDetails + '\n' : ''}` +
             `CHKSUM: ${chksumStr} (收到0x${chksumReceived.toString(16).toUpperCase().padStart(4, '0')})\n` +
             `CHKSUM验证：${chksumValid ? '有效' : `无效（应为${calcChksum.toString(16).toUpperCase().padStart(4, '0')}）`}\n` +
             `EOI: 0D (十六进制，传输为0x0D，字符表示为CR)`;
