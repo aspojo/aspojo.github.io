@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiIOM-DTI 报文解析器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        label, input, button {
+            margin: 10px 0;
+        }
+        input[type="text"] {
+            width: 500px;
+            padding: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+<h2>2BiIOM-DTI 报文解析器</h2>
+<div>
+    <label for="messageInput">输入十六进制报文（字节间用空格分隔，例如：7E 45 30 30 32 31 31 46 45 43 37 0D）:</label><br>
+    <input type="text" id="messageInput" placeholder="请输入十六进制报文">
+</div>
+<button onclick="parseMessage()">解析报文</button>
+<div id="output"></div>
+
+<script>
+    function parseMessage() {
+        const messageInput = document.getElementById('messageInput').value.trim();
+        const outputDiv = document.getElementById('output');
+
+        // 验证输入格式（十六进制字节序列，空格分隔）
+        const hexBytes = messageInput.split(' ').filter(b => b !== '');
+        if (!hexBytes.every(b => /^[0-9A-Fa-f]{2}$/.test(b))) {
+            outputDiv.innerText = "错误：请输入有效的十六进制字节序列，字节间用空格分隔（例如：7E 45 30 30 32 31 31 46 45 43 37 0D）。";
+            return;
+        }
+
+        // 转换为字节数组
+        const bytes = hexBytes.map(b => parseInt(b, 16));
+
+        // 验证最小长度（SOI + LENGTH(4) + CHKSUM(4) + EOI = 10字节）
+        if (bytes.length < 10) {
+            outputDiv.innerText = "错误：报文长度不足，至少需要10字节（SOI + LENGTH + CHKSUM + EOI）。";
+            return;
+        }
+
+        // 步骤1：提取SOI和EOI
+        const soi = bytes[0];
+        const eoi = bytes[bytes.length - 1];
+        if (soi !== 0x7E || eoi !== 0x0D) {
+            outputDiv.innerText = `错误：SOI必须为0x7E（收到0x${soi.toString(16).toUpperCase().padStart(2, '0')}），EOI必须为0x0D（收到0x${eoi.toString(16).toUpperCase().padStart(2, '0')}）。`;
+            return;
+        }
+
+        // 步骤2：提取LENGTH
+        const lengthBytes = bytes.slice(1, 5);
+        const lengthStr = lengthBytes.map(b => String.fromCharCode(b)).join('');
+        if (!/^[0-9A-Fa-f]{4}$/.test(lengthStr)) {
+            outputDiv.innerText = "错误：LENGTH必须为4个ASCII字符（十六进制0-9, A-F）。";
+            return;
+        }
+
+        // 解析LCHKSUM和LENID
+        const lchksum = parseInt(lengthStr[0], 16);
+        const highNibble = parseInt(lengthStr[1], 16);
+        const midNibble = parseInt(lengthStr[2], 16);
+        const lowNibble = parseInt(lengthStr[3], 16);
+        const lenid = (highNibble << 8) | (midNibble << 4) | lowNibble;
+        const calcLchksum = ((~(highNibble + midNibble + lowNibble) & 0xF) + 1) & 0xF;
+        const lchksumValid = calcLchksum === lchksum;
+
+        // 步骤3：提取INFO
+        const infoBytes = bytes.slice(5, 5 + lenid);
+        if (infoBytes.length !== lenid) {
+            outputDiv.innerText = `错误：INFO长度（${infoBytes.length}字节）与LENID（${lenid}）不匹配。`;
+            return;
+        }
+        const infoStr = infoBytes.map(b => String.fromCharCode(b)).join('');
+        if (!/^[1-3]*$/.test(infoStr)) {
+            outputDiv.innerText = "错误：INFO只能包含ASCII字符1、2或3。";
+            return;
+        }
+
+        // 步骤4：提取CHKSUM
+        const chksumBytes = bytes.slice(5 + lenid, bytes.length - 1);
+        if (chksumBytes.length !== 4) {
+            outputDiv.innerText = `错误：CHKSUM必须为4字节（收到${chksumBytes.length}字节）。`;
+            return;
+        }
+        const chksumStr = chksumBytes.map(b => String.fromCharCode(b)).join('');
+        if (!/^[0-9A-Fa-f]{4}$/.test(chksumStr)) {
+            outputDiv.innerText = "错误：CHKSUM必须为4个ASCII字符（十六进制0-9, A-F）。";
+            return;
+        }
+        const chksumReceived = parseInt(chksumStr, 16);
+
+        // 步骤5：验证CHKSUM
+        let sum = 0;
+        for (let i = 0; i < lengthStr.length; i++) {
+            sum += lengthStr.charCodeAt(i);
+        }
+        for (let i = 0; i < infoStr.length; i++) {
+            sum += infoStr.charCodeAt(i);
+        }
+        const calcChksum = ((~sum & 0xFFFF) + 1) & 0xFFFF;
+        const chksumValid = calcChksum === chksumReceived;
+
+        // 步骤6：显示结果
+        outputDiv.innerText = `解析结果：\n` +
+            `SOI: 7E (十六进制，传输为0x7E，字符表示为~)\n` +
+            `LENGTH: ${lengthStr} (LCHKSUM=${lengthStr[0]}, LENID=${lenid})\n` +
+            `LCHKSUM验证：${lchksumValid ? '有效' : `无效（应为${calcLchksum.toString(16).toUpperCase()}）`}\n` +
+            `INFO: ${infoStr || '无'}\n` +
+            `CHKSUM: ${chksumStr} (收到0x${chksumReceived.toString(16).toUpperCase().padStart(4, '0')})\n` +
+            `CHKSUM验证：${chksumValid ? '有效' : `无效（应为${calcChksum.toString(16).toUpperCase().padStart(4, '0')}）`}\n` +
+            `EOI: 0D (十六进制，传输为0x0D，字符表示为CR)`;
+    }
+</script>
+</body>
+</html>
