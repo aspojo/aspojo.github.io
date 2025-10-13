@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEU故障状态报文解析器</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .bit-breakdown { font-family: monospace; background: #f9f9f9; padding: 10px; margin: 5px 0; }
+        .hex-input { width: 100%; height: 100px; margin-bottom: 10px; }
+        button { padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .field-value { font-weight: bold; }
+        .raw-hex { font-family: monospace; background: #f0f0f0; padding: 2px 4px; }
+        #protocol-info { font-size: 1.1em; margin: 10px 0; }
+    </style>
+</head>
+<body>
+<h1>SDM->BiIOM LEU故障状态报文解析器</h1>
+<p>支持2.3.10和2.3.12（西安八）协议自动检测解析。示例报文已预填充。</p>
+
+<label for="hexInput">输入十六进制报文（空格分隔）:</label><br>
+<textarea id="hexInput" class="hex-input">aa 00 32 55 19 0a 0d 0e 07 11 00 02 38 ca 00 00 01 30 00 0a 00 01 5a 45 52 00 00 02 03 03 fc 7e 10 10 30 30 40 01 05 00 00 00 40 01 05 00 00 00 55 aa 31 35 5f</textarea><br>
+<button onclick="parsePacket()">解析报文</button>
+
+<div id="result"></div>
+
+<script>
+    function parsePacket() {
+        const hexString = document.getElementById('hexInput').value.trim();
+        const bytes = hexString.split(/\s+/).map(h => parseInt(h, 16));
+
+        if (bytes.length < 53) {
+            document.getElementById('result').innerHTML = '<p style="color:red;">报文长度不足！</p>';
+            return;
+        }
+
+        const header = bytes[0];
+        const lenHigh = bytes[1];
+        const lenLow = bytes[2];
+        const lenVal = (lenHigh << 8) | lenLow;
+        const msgId = bytes[3];
+
+        if (header !== 0xAA || msgId !== 0x55 || lenVal !== bytes.length - 3) {
+            document.getElementById('result').innerHTML = '<p style="color:red;">报文格式错误！HEADER应为0xAA，MSG_ID为0x55，LEN应匹配内容长度。</p>';
+            return;
+        }
+
+        // Detect protocol
+        let protocol = '2.3.12 (西安八)';
+        if (bytes[22] === 0x00 && bytes[23] === 0x01 && bytes[24] === 0x00) {
+            protocol = '2.3.10';
+        }
+
+        // Function to get raw hex for a slice
+        function getRawHex(start, end) {
+            return bytes.slice(start, end).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
+
+        // Common fields
+        const stampStart = 4;
+        const stampEnd = 10;
+        const stamp = bytes.slice(stampStart, stampEnd);
+        const year = 2000 + stamp[0];
+        const month = stamp[1];
+        const day = stamp[2];
+        const hour = stamp[3];
+        const minute = stamp[4];
+        const second = stamp[5];
+        const stampStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:${String(second).padStart(2,'0')}`;
+
+        const snStart = 10;
+        const sn = (bytes[snStart] << 24) | (bytes[snStart+1] << 16) | (bytes[snStart+2] << 8) | bytes[snStart+3];
+
+        const cbiStart = 14;
+        const cbiId = (bytes[cbiStart] << 24) | (bytes[cbiStart+1] << 16) | (bytes[cbiStart+2] << 8) | bytes[cbiStart+3];
+
+        const typeStart = 18;
+        const dataType = (bytes[typeStart] << 8) | bytes[typeStart+1];
+
+        const sbnStart = 20;
+        const sbn = (bytes[sbnStart] << 8) | bytes[sbnStart+1];
+
+        const leuIdStart = protocol === '2.3.10' ? 25 : 25;
+        const leuId = (bytes[leuIdStart] << 16) | (bytes[leuIdStart+1] << 8) | bytes[leuIdStart+2];
+        const leuIdDesc = protocol === '2.3.12 (西安八)' ? `LEU${leuId}` : 'LEU ID';
+
+        const machineStatusStart = 28;
+        const machineStatus = bytes[machineStatusStart];
+        const machineBin = machineStatus.toString(2).padStart(8, '0');
+        const machineDesc = `
+                Bit0: ${machineBin[7]} (0:故障, 1:正常) → ${parseInt(machineBin[7]) ? '正常' : '故障'}<br>
+                Bit1: ${machineBin[6]} (0:有连续3帧TSD错误或默认报文, 1:无) → ${parseInt(machineBin[6]) ? '无' : '有'}<br>
+                ${protocol === '2.3.10' ? '' : 'Bit2-7: 预留 (0)'}<br>
+                二进制: ${machineBin}
+            `;
+
+        const leuTypeStart = 29;
+        const leuType = bytes[leuTypeStart];
+        const leuTypeDesc = leuType === 0x02 ? '透明传输' : (leuType === 0x03 ? '非透明传输' : '未知');
+
+        const commStatusStart = 30;
+        const commStatus = bytes[commStatusStart];
+        const commBin = commStatus.toString(2).padStart(8, '0');
+        const commDesc = `
+                Bit0: ${commBin[7]} (0:未锁定, 1:已锁定) → ${parseInt(commBin[7]) ? '已锁定' : '未锁定'}<br>
+                Bit1: ${commBin[6]} (0:通道A, 1:通道B) → ${parseInt(commBin[6]) ? 'B' : 'A'}<br>
+                Bit2: ${commBin[5]} (0:通道A数据帧错误, 1:无) → ${parseInt(commBin[5]) ? '无' : '有'}<br>
+                Bit3: ${commBin[4]} (0:通道A时间戳错误, 1:无) → ${parseInt(commBin[4]) ? '无' : '有'}<br>
+                Bit4: ${commBin[3]} (0:通道B数据帧错误, 1:无) → ${parseInt(commBin[3]) ? '无' : '有'}<br>
+                Bit5: ${commBin[2]} (0:通道B时间戳错误, 1:无) → ${parseInt(commBin[2]) ? '无' : '有'}<br>
+                Bit6: ${commBin[1]} (0:发送过默认报文, 1:无) → ${parseInt(commBin[1]) ? '无' : '有'}<br>
+                Bit7: ${commBin[0]} (0:连续3帧TSD错误, 1:无) → ${parseInt(commBin[0]) ? '无' : '有'}<br>
+                二进制: ${commBin}
+            `;
+
+        const boardStatusStart = 31;
+        const boardStatus = bytes[boardStatusStart];
+        const boardBin = boardStatus.toString(2).padStart(8, '0');
+        let boardDesc;
+        if (protocol === '2.3.10') {
+            boardDesc = `
+                    Bit0: 0 (固定)<br>
+                    Bit1: ${boardBin[6]} (S接口板1: 0故障,1正常) → ${parseInt(boardBin[6]) ? '正常' : '故障'}<br>
+                    Bit2: ${boardBin[5]} (S接口板2: 0故障,1正常) → ${parseInt(boardBin[5]) ? '正常' : '故障'}<br>
+                    Bit3: ${boardBin[4]} (C接口板1: 0故障,1正常) → ${parseInt(boardBin[4]) ? '正常' : '故障'}<br>
+                    Bit4: ${boardBin[3]} (C接口板2: 0故障,1正常) → ${parseInt(boardBin[3]) ? '正常' : '故障'}<br>
+                    Bit5: ${boardBin[2]} (存储板1: 0故障,1正常) → ${parseInt(boardBin[2]) ? '正常' : '故障'}<br>
+                    Bit6: ${boardBin[1]} (存储板2: 0故障,1正常) → ${parseInt(boardBin[1]) ? '正常' : '故障'}<br>
+                    Bit7: 0 (预留)<br>
+                    二进制: ${boardBin}
+                `;
+        } else {
+            boardDesc = `
+                    Bit0: 0 (预留)<br>
+                    Bit1: ${boardBin[6]} (S板间: 0-右侧收到左侧数据, 1-未收到) → ${parseInt(boardBin[6]) ? '未收到' : '收到'}<br>
+                    Bit2: ${boardBin[5]} (S板间: 0-左侧收到右侧数据, 1-未收到) → ${parseInt(boardBin[5]) ? '未收到' : '收到'}<br>
+                    Bit3: ${boardBin[4]} (右侧C板: 0故障,1正常) → ${parseInt(boardBin[4]) ? '正常' : '故障'}<br>
+                    Bit4: ${boardBin[3]} (左侧C板: 0故障,1正常) → ${parseInt(boardBin[3]) ? '正常' : '故障'}<br>
+                    Bit5: 1 (预留)<br>
+                    Bit6: 1 (预留)<br>
+                    Bit7: 0 (预留)<br>
+                    二进制: ${boardBin}
+                `;
+        }
+
+        const outStart = 32;
+        const outPorts = bytes.slice(outStart, outStart + 4);
+        const portName = protocol === '2.3.10' ? '输出口' : 'LEU端口';
+        const outDescs = outPorts.map((out, i) => {
+            const outBin = out.toString(2).padStart(8, '0');
+            const outTypeBin = outBin[3] + outBin[2]; // Bit4=outBin[3], Bit5=outBin[2]
+            let outType = '未知';
+            if (outTypeBin === '10') outType = '正常报文';
+            else if (outTypeBin === '01') outType = '默认报文';
+            else if (outTypeBin === '00' || outTypeBin === '11') outType = '未知状态';
+            return `
+                    Bit4-5: ${outTypeBin} (${outType})<br>
+                    ${protocol === '2.3.10' ? `Bit3: ${outBin[4]} (${parseInt(outBin[4]) ? '有列车通过' : '无列车通过'})<br>` : ''}
+                    二进制: ${outBin}
+                `;
+        });
+
+        const codeStart = 36;
+        const codeEnd = 48;
+        const codeInfo = bytes.slice(codeStart, codeEnd);
+        const code1 = codeInfo.slice(0,6).map(b => '0x' + b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+        const code2 = codeInfo.slice(6,12).map(b => '0x' + b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+        const codeDesc = protocol === '2.3.12 (西安八)' ? '码位1:上一次TSD前6字节，码位2:本次TSD前6字节' : '前6字节(码位1)，后6字节(码位2)';
+
+        const endStart = 48;
+        const end = bytes[endStart];
+
+        const crcStart = 49;
+        const crc = (bytes[crcStart] << 24) | (bytes[crcStart+1] << 16) | (bytes[crcStart+2] << 8) | bytes[crcStart+3];
+        const crcHex = '0x' + crc.toString(16).padStart(8,'0').toUpperCase();
+
+        let tableHtml = `<div id="protocol-info">使用的协议: <strong>${protocol}</strong></div><table><tr><th>序号</th><th>名称</th><th>长度</th><th>类型</th><th>原始数据</th><th>值</th><th>说明</th></tr>`;
+
+        // Common header rows
+        tableHtml += `
+                <tr><td>1</td><td>HEADER</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(0,1)}</td><td class="field-value">0x${header.toString(16).toUpperCase()}</td><td>帧开始标志，默认0xAA</td></tr>
+                <tr><td>2</td><td>LEN</td><td>2</td><td>UInt16</td><td class="raw-hex">${getRawHex(1,3)}</td><td class="field-value">${lenVal}</td><td>帧长度（从MSG_ID到CRC）</td></tr>
+                <tr><td>3</td><td>MSG_ID</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(3,4)}</td><td class="field-value">0x${msgId.toString(16).toUpperCase()}</td><td>消息ID，默认0x55</td></tr>
+                <tr><td>4</td><td>STAMP</td><td>6</td><td>UInt8</td><td class="raw-hex">${getRawHex(stampStart, stampEnd)}</td><td class="field-value">${stampStr}</td><td>北京时间 (年从2000开始)</td></tr>
+                <tr><td>5</td><td>SN</td><td>4</td><td>UInt32</td><td class="raw-hex">${getRawHex(snStart, snStart+4)}</td><td class="field-value">${sn}</td><td>报文序列号</td></tr>
+                <tr><td>6</td><td>CBI_ID</td><td>4</td><td>UInt32</td><td class="raw-hex">${getRawHex(cbiStart, cbiStart+4)}</td><td class="field-value">${cbiId}</td><td>联锁集中站编号（十进制）</td></tr>
+                <tr><td>7</td><td>缓存区数据类型</td><td>2</td><td>UInt16</td><td class="raw-hex">${getRawHex(typeStart, typeStart+2)}</td><td class="field-value">0x${dataType.toString(16).padStart(4,'0').toUpperCase()}</td><td>LEU状态信息:0x000A</td></tr>
+                <tr><td>8</td><td>SBN</td><td>2</td><td>UInt16</td><td class="raw-hex">${getRawHex(sbnStart, sbnStart+2)}</td><td class="field-value">${sbn}</td><td>最近发送的分区编号：0x0001</td></tr>
+            `;
+
+        let nextSeq = 9;
+        let nextIdx = 22;
+        if (protocol === '2.3.10') {
+            // TNS
+            const tns = (bytes[nextIdx] << 8) | bytes[nextIdx+1];
+            tableHtml += `<tr><td>${nextSeq}</td><td>TNS</td><td>2</td><td>UInt16</td><td class="raw-hex">${getRawHex(nextIdx, nextIdx+2)}</td><td class="field-value">${tns}</td><td>子分区的总数：0001</td></tr>`;
+            nextSeq++; nextIdx += 2;
+            // Reserve
+            const reserve = bytes[nextIdx];
+            tableHtml += `<tr><td>${nextSeq}</td><td>预留</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(nextIdx, nextIdx+1)}</td><td class="field-value">${reserve} (0x${reserve.toString(16).toUpperCase()})</td><td>0</td></tr>`;
+            nextSeq++; nextIdx += 1;
+        } else {
+            // LEU端口开短路状态
+            const openShortStart = 22;
+            const openShort = bytes[openShortStart];
+            const openBin = openShort.toString(2).padStart(8, '0');
+            const p1val = (parseInt(openBin[6]) << 1) | parseInt(openBin[7]);
+            const p2val = (parseInt(openBin[4]) << 1) | parseInt(openBin[5]);
+            const p3val = (parseInt(openBin[2]) << 1) | parseInt(openBin[3]);
+            const p4val = (parseInt(openBin[0]) << 1) | parseInt(openBin[1]);
+            const p1desc = p1val === 1 ? '正常' : p1val === 2 ? '开路' : p1val === 3 ? '短路' : '未知';
+            const p2desc = p2val === 1 ? '正常' : p2val === 2 ? '开路' : p2val === 3 ? '短路' : '未知';
+            const p3desc = p3val === 1 ? '正常' : p3val === 2 ? '开路' : p3val === 3 ? '短路' : '未知';
+            const p4desc = p4val === 1 ? '正常' : p4val === 2 ? '开路' : p4val === 3 ? '短路' : '未知';
+            const openShortDesc = `
+                    Bit1-0 (端口1): ${p1val} (${p1desc})<br>
+                    Bit3-2 (端口2): ${p2val} (${p2desc})<br>
+                    Bit5-4 (端口3): ${p3val} (${p3desc})<br>
+                    Bit7-6 (端口4): ${p4val} (${p4desc})<br>
+                    二进制: ${openBin}
+                `;
+            tableHtml += `<tr><td>${nextSeq}</td><td>LEU端口开短路状态</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(openShortStart, openShortStart+1)}</td><td class="field-value">${openShort} (0x${openShort.toString(16).toUpperCase()})</td><td><div class="bit-breakdown">${openShortDesc}</div></td></tr>`;
+            nextSeq++; nextIdx += 1;
+
+            // S接口板C排灯状态、当前主用C板编号
+            const cBoardStart = 23;
+            const cBoard = bytes[cBoardStart];
+            const cBin = cBoard.toString(2).padStart(8, '0');
+            const cMainVal = (parseInt(cBin[0]) << 1) | parseInt(cBin[1]);
+            const cMainDesc = cMainVal === 1 ? 'C板1 (靠近S板)' : cMainVal === 2 ? 'C板2 (靠近把手)' : '未知';
+            const c1Val = (parseInt(cBin[4]) << 1) | parseInt(cBin[5]);
+            const c1Desc = c1Val === 1 ? '绿灯 (正常)' : c1Val === 2 ? '红灯 (异常)' : '未知';
+            const c2Val = (parseInt(cBin[6]) << 1) | parseInt(cBin[7]);
+            const c2Desc = c2Val === 1 ? '绿灯 (正常)' : c2Val === 2 ? '红灯 (异常)' : '未知';
+            const cReserve = cBin[2] + cBin[3];
+            const cBoardDesc = `
+                    Bit7-6 (当前主用C板): ${cMainVal} (${cMainDesc})<br>
+                    Bit5-4 (预留): ${cReserve} (应为00)<br>
+                    Bit3-2 (C1灯): ${c1Val} (${c1Desc})<br>
+                    Bit1-0 (C2灯): ${c2Val} (${c2Desc})<br>
+                    二进制: ${cBin}
+                `;
+            tableHtml += `<tr><td>${nextSeq}</td><td>S接口板C排灯状态、当前主用C板编号</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(cBoardStart, cBoardStart+1)}</td><td class="field-value">${cBoard} (0x${cBoard.toString(16).toUpperCase()})</td><td><div class="bit-breakdown">${cBoardDesc}</div></td></tr>`;
+            nextSeq++; nextIdx += 1;
+
+            // S接口板A/B排指示灯状态、当前主用S板编号
+            const sBoardStart = 24;
+            const sBoard = bytes[sBoardStart];
+            const sBin = sBoard.toString(2).padStart(8, '0');
+            const aVal = (parseInt(sBin[0]) << 1) | parseInt(sBin[1]);
+            const aDesc = aVal === 1 ? '绿灯 (正常)' : aVal === 2 ? '红灯 (错误)' : aVal === 3 ? '不亮 (未建立)' : '未知';
+            const b1Val = (parseInt(sBin[2]) << 1) | parseInt(sBin[3]);
+            const b1Desc = b1Val === 1 ? '绿灯 (正常)' : b1Val === 2 ? '红灯 (错误)' : b1Val === 3 ? '不亮 (未建立)' : '未知';
+            const b2Val = (parseInt(sBin[4]) << 1) | parseInt(sBin[5]);
+            const b2Desc = b2Val === 0 ? '绿灯 (主用)' : b2Val === 1 ? '不亮 (备用)' : '未知';
+            const sMainVal = (parseInt(sBin[6]) << 1) | parseInt(sBin[7]);
+            const sMainDesc = sMainVal === 1 ? 'S板1 (靠近电源板)' : sMainVal === 2 ? 'S板2 (靠近C板)' : '未知';
+            const sBoardDesc = `
+                    Bit7-6 (A排灯): ${aVal} (${aDesc})<br>
+                    Bit5-4 (B1灯): ${b1Val} (${b1Desc})<br>
+                    Bit3-2 (B2灯): ${b2Val} (${b2Desc})<br>
+                    Bit1-0 (当前S板): ${sMainVal} (${sMainDesc})<br>
+                    二进制: ${sBin}
+                `;
+            tableHtml += `<tr><td>${nextSeq}</td><td>S接口板A/B排指示灯状态、当前主用S板编号</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(sBoardStart, sBoardStart+1)}</td><td class="field-value">${sBoard} (0x${sBoard.toString(16).toUpperCase()})</td><td><div class="bit-breakdown">${sBoardDesc}</div></td></tr>`;
+            nextSeq++; nextIdx += 1;
+        }
+
+        // LEU ID
+        tableHtml += `<tr><td>${nextSeq}</td><td>LEU ID</td><td>3</td><td>UInt24</td><td class="raw-hex">${getRawHex(leuIdStart, leuIdStart+3)}</td><td class="field-value">${leuId} (${leuIdDesc})</td><td>${protocol === '2.3.12 (西安八)' ? '0x000001=LEU1 等' : 'LEU ID'}</td></tr>`;
+        nextSeq++; nextIdx += 3;
+
+        // Machine
+        tableHtml += `<tr><td>${nextSeq}</td><td>LEU整机状态</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(machineStatusStart, machineStatusStart+1)}</td><td class="field-value">${machineStatus} (0x${machineStatus.toString(16).toUpperCase()})</td><td><div class="bit-breakdown">${machineDesc}</div></td></tr>`;
+        nextSeq++; nextIdx += 1;
+
+        // Type
+        tableHtml += `<tr><td>${nextSeq}</td><td>LEU类型</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(leuTypeStart, leuTypeStart+1)}</td><td class="field-value">0x${leuType.toString(16).toUpperCase()}</td><td>${leuTypeDesc}</td></tr>`;
+        nextSeq++; nextIdx += 1;
+
+        // Comm
+        tableHtml += `<tr><td>${nextSeq}</td><td>与前级通信状态</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(commStatusStart, commStatusStart+1)}</td><td class="field-value">${commStatus} (0x${commStatus.toString(16).toUpperCase()})</td><td><div class="bit-breakdown">${commDesc}</div></td></tr>`;
+        nextSeq++; nextIdx += 1;
+
+        // Board
+        tableHtml += `<tr><td>${nextSeq}</td><td>LEU板级状态</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(boardStatusStart, boardStatusStart+1)}</td><td class="field-value">${boardStatus} (0x${boardStatus.toString(16).toUpperCase()})</td><td><div class="bit-breakdown">${boardDesc}</div></td></tr>`;
+        nextSeq++; nextIdx += 1;
+
+        // Ports
+        for (let i = 0; i < 4; i++) {
+            const portStart = outStart + i;
+            tableHtml += `<tr><td>${nextSeq}</td><td>${portName}${i+1}状态</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(portStart, portStart+1)}</td><td class="field-value">${outPorts[i]} (0x${outPorts[i].toString(16).toUpperCase()})</td><td><div class="bit-breakdown">${outDescs[i]}</div></td></tr>`;
+            nextSeq++; nextIdx += 1;
+        }
+
+        // Code
+        tableHtml += `<tr><td>${nextSeq}</td><td>码位信息</td><td>12</td><td>UInt8</td><td class="raw-hex">${getRawHex(codeStart, codeEnd)}</td><td class="field-value">码位1: ${code1}<br>码位2: ${code2}</td><td>${codeDesc}</td></tr>`;
+        nextSeq++; nextIdx += 12;
+
+        // END
+        const endSeq = protocol === '2.3.10' ? 21 : 22;
+        tableHtml += `<tr><td>${endSeq}</td><td>END</td><td>1</td><td>UInt8</td><td class="raw-hex">${getRawHex(endStart, endStart+1)}</td><td class="field-value">0x${end.toString(16).toUpperCase()}</td><td>帧结束标志，默认0x55</td></tr>`;
+        nextSeq++; nextIdx += 1;
+
+        // CRC
+        const crcSeq = protocol === '2.3.10' ? 22 : 23;
+        tableHtml += `<tr><td>${crcSeq}</td><td>CRC</td><td>4</td><td>UInt32</td><td class="raw-hex">${getRawHex(crcStart, crcStart+4)}</td><td class="field-value">${crcHex}</td><td>CRC校验（从LEN到END）</td></tr>`;
+
+        tableHtml += '</table>';
+
+        document.getElementById('result').innerHTML = tableHtml;
+    }
+
+    // Auto-parse on load
+    window.onload = parsePacket;
+</script>
+</body>
+</html>
