@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protobuf Hex 到 JSON 解析器</title>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.6/dist/protobuf.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        textarea { width: 100%; height: 200px; margin-bottom: 10px; font-family: monospace; }
+        button { padding: 10px 20px; font-size: 16px; margin-bottom: 10px; }
+        #jsonOutput {
+            white-space: pre-wrap;
+            background-color: #f4f4f4;
+            padding: 10px;
+            border: 1px solid #ddd;
+            font-family: monospace;
+            font-size: 12px;
+            overflow: auto;
+            max-height: 600px;
+            line-height: 1.4;
+        }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+<h1>Protobuf Hex 到 JSON 解析器 (MSS.ZC.ZCClientMsg)</h1>
+<p>在下方输入十六进制编码的 Protobuf 数据，点击解析按钮转换为 JSON。</p>
+<p><strong>注意：</strong> 如果数据不完整（如演示数据被截断），可能会导致解析错误。请确保输入完整的数据。</p>
+
+<label for="hexInput">Hex 输入：</label><br>
+<textarea id="hexInput" placeholder="在此粘贴您的十六进制字符串...（确保数据完整，以避免索引越界错误）"></textarea><br>
+
+<button onclick="parseHex()">解析为 JSON</button>
+
+<label for="jsonOutput">JSON 输出（格式化显示）：</label><br>
+<pre id="jsonOutput"></pre>
+
+<script>
+    const protoText = `syntax="proto2";
+package MSS.ZC;
+
+// ... (省略完整的 proto 定义，与之前相同)
+message ZCClientRequestMsg
+{
+    optional uint32                 msg_seq         = 1;    // 序列号
+    optional uint64                 time_stamp      = 2;    // 请求时间
+    optional uint32                 work_station    = 3;    // mss station id
+    optional uint32                 work_device     = 4;    // mss zc device id
+}
+
+// ZC板卡的具体版本信息
+message BoardVerInfo
+{
+    optional     uint32    version_index        = 1;
+    optional     string    version_value        = 2;
+}
+
+// ZC板卡的电子标签
+message BoardETag
+{
+    optional string     board_name      = 1;       // 板卡名称
+    optional string     bom             = 2;    // bom名称
+    optional string     bom_version     = 3;    // BOM版本
+    optional string     board_made_sn   = 4;       // 单板制造序列号
+    optional string     pcb_version     = 5;       // PCB版本
+    optional string     made_year       = 6;       // 制造年代
+    optional string     made_month      = 7;       // 制造月份
+    optional string     made_day        = 8;       // 制造日期
+    optional string     made_week       = 9;       // 制造周数
+    optional string     made_fty        = 10;   // 制造地点编码
+    optional string     made_user1      = 11;   // 项目名称1
+    optional string     made_user2      = 12;   // 项目名称2或者项目1的子项目
+    optional string     mac_eth0        = 13;   // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string     mac_eth1        = 14;   // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string     mac_eth2        = 15;   // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string     mac_eth3        = 16;   // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string     mac_eth_debug   = 17;   // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+}
+
+// ZC的板卡状态
+message ZCBoardStatus
+{
+    optional    uint32              board_id               = 1;
+    optional    uint32              board_device_status    = 2; // 正常0 故障1 其它离线
+    optional    uint32              bit_all_status         = 3; // 输入输出灯状态
+    optional    uint32              bit_all_alarm_status   = 4; // 输入输出灯报警状态
+}
+
+// ZC与相邻ZC的通讯状态
+message NextZCNetStatus
+{
+    optional    uint32  zc_id                = 1;
+    optional    uint32  net_status           = 2; //报警故障码
+    optional    uint32  net_comm_index       = 3; //通信链路索引
+}
+
+// CBI通讯故障具体报警
+message CBIDetailStatus
+{
+    optional    uint32  cbi_id                 = 1;
+    optional    uint32  cbi_status             = 2; //通信链路状态
+    optional    uint32  cbi_comm_index         = 3; //通信链路索引
+}
+
+// 列车通讯故障具体报警
+message TrainDetailStatus
+{
+    optional    uint32  train_pvid            = 1;
+    optional    uint32  train_status          = 2; //通信链路状态
+    optional    uint32  train_comm_index      = 3; //通信链路索
+}
+
+// ZC与ZC之间通讯故障具体报警
+message NextZCDetailStatus
+{
+    optional    uint32  zc_id                 = 1;
+    optional    uint32  zc_status             = 2; //通信链路状态
+    optional    uint32  zc_comm_index         = 3; //通信链路索
+}
+
+// 计轴区段具体报警
+message AxleDetailStatus
+{
+    optional    uint32  trace_id            = 1;
+    optional    uint32  trace_status        = 2;//报警故障码
+}
+
+// ATS通讯故障具体报警
+message ATSDetailStatus
+{
+    optional    uint32  ats_status             = 1; //通信链路状态
+    optional    uint32  ats_comm_index         = 2; //通信链路索引
+}
+
+// 单个ZC的基本信息
+message ZCInfo
+{
+    optional    uint32                  zc_id                   = 1;
+    optional    uint32                  station_id              = 2;
+    optional    uint32                  is_offLine              = 3;      // 1:离线  0:在线
+    optional    uint32                  zc_stat                 = 4;      // 0:正常  1:故障  2 离线
+
+    optional    uint32                  vote_a                  = 5;
+    optional    uint32                  vote_b                  = 6;
+
+    optional    uint32                  host_only               = 7;
+
+    // ZC版本信息
+    optional    string                  app_ver                 = 8;
+    optional    string                  plt_ver                 = 9;
+    optional    string                  cfg_ver                 = 10;
+    optional    string                  zcm_ver                 = 11;
+
+    // ZC板卡状态
+    repeated    ZCBoardStatus           zc_board_stats            = 12;
+
+    // 与相关设备的通讯状态
+    optional    uint32                   ats_net_stat              = 13; // 0:正常  1:故障  2:离线
+    optional    uint32                   cc_net_stat               = 14;
+    optional    uint32                   cbi_net_stat              = 15;
+    repeated    NextZCNetStatus          next_zc_net_stats         = 16;
+
+    // 相关的具体通讯报警/原因
+    repeated    CBIDetailStatus          cbi_details             = 17;
+    repeated    TrainDetailStatus        train_details           = 18;
+    repeated    NextZCDetailStatus       next_zc_details         = 19;
+
+    // 计轴的具体报警/原因
+    repeated    AxleDetailStatus           axle_details            = 20;
+
+    repeated    ATSDetailStatus       ats_details                = 21;
+
+    optional    uint32                  sync_state               = 22;
+    optional    bool                  is_ats_float_ip            = 23; // ATS的主备机是否为飘IP的方案
+	optional    uint32                back_cut_knob_stat         = 24;  //倒切旋钮状态 0:自动 1:强A 2:强B
+}
+
+// ZC返回给Client的报文内容
+message ZCClientMsg
+{
+    optional    uint32      msg_seq       = 1;
+    optional    uint64      time_stamp    = 2;
+    repeated    ZCInfo      zc_infos      = 3;
+}
+
+// 板卡电子标签请求报文内容
+message ZCBoardEtagRequestMsg
+{
+    optional uint32                 msg_seq         = 1;    // 序列号
+    optional uint64                 time_stamp      = 2;    // 请求时间
+    optional uint32                 work_station    = 3;    // mss station id
+    optional uint32                 board_id        = 4;
+}
+
+// ZC的板卡状态
+message ZCBoardEtagMsg
+{
+    optional    uint32              board_id               = 1;
+    optional    BoardETag           board_tag              = 2;
+}
+
+// 板卡版本请求报文内容
+message ZCBoardVerRequestMsg
+{
+    optional uint32                 msg_seq         = 1;    // 序列号
+    optional uint64                 time_stamp      = 2;    // 请求时间
+    optional uint32                 work_station    = 3;    // mss station id
+    optional uint32                 board_id        = 4;
+}
+
+// ZC的板卡状态
+message ZCBoardVerMsg
+{
+    optional    uint32              board_id               = 1;
+    repeated    BoardVerInfo        board_versions         = 2;
+}`;
+
+    let Type;
+
+    async function initProto() {
+        const root = protobuf.parse(protoText).root;
+        Type = root.lookupType("MSS.ZC.ZCClientMsg");
+    }
+
+    function hexToBytes(hex) {
+        hex = hex.replace(/[^0-9A-Fa-f]/g, '');
+        if (hex.length % 2 !== 0) {
+            throw new Error('Hex 字符串长度必须为偶数');
+        }
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < hex.length; i += 2) {
+            bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+        }
+        return bytes;
+    }
+
+    function parseHex() {
+        const hexInput = document.getElementById('hexInput').value;
+        const output = document.getElementById('jsonOutput');
+        try {
+            if (!hexInput.trim()) {
+                output.textContent = '请在输入框中输入 Hex 数据。';
+                return;
+            }
+            const bytes = hexToBytes(hexInput);
+            console.log('缓冲区长度:', bytes.length); // 调试用
+            const message = Type.decode(bytes);
+            const json = Type.toObject(message, {
+                defaults: false,
+                longs: String,
+                enums: String,
+                bytes: String,
+                json: true
+            });
+            output.className = 'success';
+            output.textContent = JSON.stringify(json, null, 2);
+        } catch (error) {
+            output.className = 'error';
+            output.textContent = '解析错误: ' + error.message + '\n\n提示: 这通常是因为 Hex 数据被截断或格式错误。请检查数据完整性，并确保 Protobuf 消息完整无误。如果是演示数据，它已被截断（缺少最后 10 字节）。建议使用完整数据重试。';
+            console.error(error);
+        }
+    }
+
+    // 页面加载时初始化
+    window.onload = initProto;
+</script>
+</body>
+</html>
