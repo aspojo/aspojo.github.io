@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux 日志监控脚本使用说明（简洁版）</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
+        h1, h2 { color: #333; }
+        pre { background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+        ul, ol { margin-left: 20px; }
+    </style>
+</head>
+<body>
+
+<h1>Linux 日志监控脚本使用说明（简洁版）</h1>
+
+<h2>概述</h2>
+<p><code>monitor_logs.sh</code> 监控 <code>/var/local/bimss/logs/</code> 子文件夹中的滚动日志（<code>.log.[数字]</code>），压缩成 <code>.tar.gz</code> 归档到 <code>/var/local/bimss/logs/archive/YYYY-MM-DD/</code>，删除原文件，并清理指定天数前目录（默认7天）。</p>
+
+<h2>依赖</h2>
+<ul>
+    <li>Linux (bash, find, tar, date)。</li>
+    <li>写权限到 <code>/var/local/bimss/logs/</code>。</li>
+</ul>
+
+<h2>安装</h2>
+<ol>
+    <li>创建目录：<code>sudo mkdir -p /var/local/bimss/logs/archive</code></li>
+    <li>保存脚本到 <code>/usr/local/bin/monitor_logs.sh</code>（见下）。</li>
+    <li>权限：<code>sudo chmod +x /usr/local/bin/monitor_logs.sh</code></li>
+</ol>
+
+<h3>脚本内容</h3>
+<pre><code>#!/bin/bash
+
+LOGS_DIR="/var/local/bimss/logs"
+ARCHIVE_DIR="/var/local/bimss/logs/archive"
+DAYS_TO_KEEP=${1:-7}
+
+mkdir -p "${ARCHIVE_DIR}"
+
+get_rolling_logs() {
+    find "${LOGS_DIR}" -not -path "${LOGS_DIR}/archive/*" -type f -name "*.log.[0-9]*" -printf '%p\n' | sort
+}
+
+archive_file() {
+    local log_file="$1"
+    local subdir=$(basename "$(dirname "${log_file}")")
+    local timestamp=$(date '+%Y%m%d_%H%M%S')
+    local file_basename=$(basename "${log_file}")
+    local date_dir=$(date '+%Y-%m-%d')
+    local target_subdir="${ARCHIVE_DIR}/${date_dir}"
+    mkdir -p "${target_subdir}"
+    local archive_name="${subdir}_${file_basename}_${timestamp}.tar.gz"
+    local archive_path="${target_subdir}/${archive_name}"
+    tar -czf "${archive_path}" -C "$(dirname "${log_file}")" "${file_basename}"
+    if [[ $? -eq 0 ]]; then
+        echo "已压缩并归档：${log_file} -> ${archive_path}"
+        rm -f "${log_file}"
+        echo "已删除原文件：${log_file}"
+    else
+        echo "压缩失败：${log_file}"
+    fi
+}
+
+cleanup_old_archives() {
+    echo "开始清理 ${DAYS_TO_KEEP} 天前归档..."
+    local current_date=$(date '+%Y-%m-%d')
+    local cutoff_date=$(date -d "${current_date} - ${DAYS_TO_KEEP} days" '+%Y-%m-%d')
+    echo "当前: ${current_date}，截止: ${cutoff_date}"
+    local deleted_count=0
+    while IFS= read -r date_dir; do
+        if [[ -n "${date_dir}" && -d "${date_dir}" ]]; then
+            local dir_date=$(basename "${date_dir}")
+            if [[ "${dir_date}" < "${cutoff_date}" ]]; then
+                rm -rf "${date_dir}"
+                if [[ $? -eq 0 ]]; then
+                    echo "已删除: ${dir_date}"
+                    deleted_count=$((deleted_count + 1))
+                fi
+            fi
+        fi
+    done &lt; &lt;(find "${ARCHIVE_DIR}" -maxdepth 1 -type d -name "20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]" 2&gt;/dev/null)
+    [[ ${deleted_count} -eq 0 ]] &amp;&amp; echo "无旧目录" || echo "删除 ${deleted_count} 个"
+    find "${ARCHIVE_DIR}" -type d -empty -delete
+    echo "清理空文件夹完成"
+}
+
+main() {
+    local current_files=$(get_rolling_logs)
+    while IFS= read -r file; do
+        [[ -n "${file}" &amp;&amp; -f "${file}" ]] &amp;&amp; archive_file "${file}"
+    done &lt;&lt;&lt; "${current_files}"
+    cleanup_old_archives
+}
+
+main
+</code></pre>
+
+<h2>运行</h2>
+<ul>
+    <li><strong>手动</strong>：<code>./monitor_logs.sh [天数]</code>（默认7）。</li>
+    <li><strong>Cron</strong>（每5min）： <code>sudo crontab -e</code>，添加 <code>*/5 * * * * /usr/local/bin/monitor_logs.sh &gt;&gt; /var/log/monitor_logs.log 2&gt;&amp;1</code></li>
+</ul>
+
+<h2>测试</h2>
+<ol>
+    <li>生成测试文件：用 <code>test_logs.sh</code>（之前提供）。</li>
+    <li>创建滚动日志：<code>touch /var/local/bimss/logs/bzz/test.log.1</code></li>
+    <li>运行脚本，检查归档/删除。</li>
+    <li>清理测试：运行后，旧日期目录（如8天前）应删除。</li>
+</ol>
+
+<h2>注意</h2>
+<ul>
+    <li>备份前测试，避免误删。</li>
+    <li>自定义：编辑 <code>LOGS_DIR</code>/<code>ARCHIVE_DIR</code>。</li>
+    <li>问题：查权限/日志输出。</li>
+</ul>
+
+</body>
+</html>
