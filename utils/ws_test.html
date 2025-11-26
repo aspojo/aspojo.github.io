@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>终极 WebSocket Protobuf 调试工具（ZC专用）</title>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.6/dist/protobuf.min.js"></script>
+    <style>
+        body {font-family: Arial, sans-serif; margin:20px; background:#f5f5f5;}
+        .container {max-width:1200px; margin:0 auto; background:white; padding:20px; border-radius:8px; box-shadow:0 2px 15px rgba(0,0,0,0.1);}
+        h1 {color:#333; margin-bottom:10px;}
+        .subtitle {color:#666; font-size:15px; margin-bottom:20px;}
+        .config, .proto-section {margin:15px 0; padding:15px; background:#fffbe6; border-radius:6px; border-left:5px solid #ffc107;}
+        label {display:inline-block; width:140px; font-weight:bold; margin-right:10px;}
+        input[type=text], select, textarea {padding:8px; border:1px solid #ddd; border-radius:4px; font-family:Consolas,monospace;}
+        button {padding:10px 20px; margin:5px 8px 5px 0; border:none; border-radius:4px; cursor:pointer;}
+        button.primary {background:#007bff; color:white;}
+        button.success {background:#28a745; color:white;}
+        button.danger {background:#dc3545; color:white;}
+        button:disabled {background:#6c757d; cursor:not-allowed;}
+        .status {padding:12px; border-radius:6px; margin:10px 0; font-weight:bold; font-size:15px;}
+        .connected {background:#d4edda; color:#155724;}
+        .connecting {background:#fff3cd; color:#856404;}
+        .disconnected {background:#f8d7da; color:#721c24;}
+        .log {height:460px; overflow-y:auto; background:#f8f9fa; border:1px solid #ddd; padding:10px; font-family:Consolas,monospace; font-size:14px; line-height:1.5;}
+        .row {display:flex; align-items:center; margin:15px 0; flex-wrap:wrap;}
+        .row > * {margin-right:10px;}
+        .editor {background:#fafafa; border:1px solid #ddd; padding:12px; border-radius:4px; margin:10px 0;}
+        .tip {font-size:13px; color:#666; margin-left:10px;}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>WebSocket Protobuf 双向调试神器（ZC专用）</h1>
+    <div class="subtitle">发送/接收类型完全可选 · 自动识别 · 协议已内置</div>
+
+    <!-- 1. 连接地址 -->
+    <div class="config">
+        <label for="wsUrl">WebSocket 地址：</label>
+        <input type="text" id="wsUrl" style="width:560px;" value="ws://192.168.34.128:9617/zc/info">
+        <button id="saveUrlBtn" class="primary">保存并连接</button>
+    </div>
+
+    <!-- 2. Proto 定义（已预填你的完整协议） -->
+    <div class="proto-section">
+        <p><strong>你的 ZC 协议已内置（可修改）</strong></p>
+        <textarea id="protoText" rows="12">syntax = "proto3";
+package demo;
+
+// 请求报文内容
+message ZCClientRequestMsg
+{
+    optional uint32 msg_seq = 1; // 序列号
+    optional uint64 time_stamp = 2; // 请求时间
+    optional uint32 work_station = 3; // mss station id
+    optional uint32 work_device = 4; // mss zc device id
+}
+///////////////////////////////////////////////////////////////////////////////
+// ZC对客户端请求的回复的相关数据结构
+// ZC板卡的具体版本信息
+message BoardVerInfo
+{
+    optional uint32 version_index = 1;
+    optional string version_value = 2;
+}
+// ZC板卡的电子标签
+message BoardETag
+{
+    optional string board_name = 1; // 板卡名称
+    optional string bom = 2; // bom名称
+    optional string bom_version = 3; // BOM版本
+    optional string board_made_sn = 4; // 单板制造序列号
+    optional string pcb_version = 5; // PCB版本
+    optional string made_year = 6; // 制造年代
+    optional string made_month = 7; // 制造月份
+    optional string made_day = 8; // 制造日期
+    optional string made_week = 9; // 制造周数
+    optional string made_fty = 10; // 制造地点编码
+    optional string made_user1 = 11; // 项目名称1
+    optional string made_user2 = 12; // 项目名称2或者项目1的子项目
+    optional string mac_eth0 = 13; // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string mac_eth1 = 14; // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string mac_eth2 = 15; // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string mac_eth3 = 16; // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+    optional string mac_eth_debug = 17; // MAC地址6个字节（0~5），剩余两个字节保留（6,7）
+}
+// ZC的板卡状态
+message ZCBoardStatus
+{
+    optional uint32 board_id = 1;
+    optional uint32 board_device_status = 2; // 正常0 故障1 其它离线
+    optional uint32 bit_all_status = 3; // 输入输出灯状态
+    optional uint32 bit_all_alarm_status = 4; // 输入输出灯报警状态
+}
+// ZC与相邻ZC的通讯状态
+message NextZCNetStatus
+{
+    optional uint32 zc_id = 1;
+    optional uint32 net_status = 2; //报警故障码
+    optional uint32 net_comm_index = 3; //通信链路索引
+}
+// CBI通讯故障具体报警
+message CBIDetailStatus
+{
+    optional uint32 cbi_id = 1;
+    optional uint32 cbi_status = 2; //通信链路状态
+    optional uint32 cbi_comm_index = 3; //通信链路索引
+}
+// 列车通讯故障具体报警
+message TrainDetailStatus
+{
+    optional uint32 train_pvid = 1;
+    optional uint32 train_status = 2; //通信链路状态
+    optional uint32 train_comm_index = 3; //通信链路索
+}
+// ZC与ZC之间通讯故障具体报警
+message NextZCDetailStatus
+{
+    optional uint32 zc_id = 1;
+    optional uint32 zc_status = 2; //通信链路状态
+    optional uint32 zc_comm_index = 3; //通信链路索 F
+}
+// 计轴区段具体报警
+message AxleDetailStatus
+{
+    optional uint32 trace_id = 1;
+    optional uint32 trace_status = 2;//报警故障码
+}
+// ATS通讯故障具体报警
+message ATSDetailStatus
+{
+    optional uint32 ats_status = 1; //通信链路状态
+    optional uint32 ats_comm_index = 2; //通信链路索引
+}
+// 单个ZC的基本信息
+message ZCInfo
+{
+    optional uint32 zc_id = 1;
+    optional uint32 station_id = 2;
+    optional uint32 is_offLine = 3; // 1:离线 0:在线
+    optional uint32 zc_stat = 4; // 0:正常 1:故障 2 离线
+    optional uint32 vote_a = 5;
+    optional uint32 vote_b = 6;
+    optional uint32 host_only = 7;
+    // ZC版本信息
+    optional string app_ver = 8;
+    optional string plt_ver = 9;
+    optional string cfg_ver = 10;
+    optional string zcm_ver = 11;
+    // ZC板卡状态
+    repeated ZCBoardStatus zc_board_stats = 12;
+
+    // 与相关设备的通讯状态
+    optional uint32 ats_net_stat = 13; // 0:正常 1:故障 2:离线
+    optional uint32 cc_net_stat = 14;
+    optional uint32 cbi_net_stat = 15;
+    repeated NextZCNetStatus next_zc_net_stats = 16;
+    // 相关的具体通讯报警/原因
+    repeated CBIDetailStatus cbi_details = 17;
+    repeated TrainDetailStatus train_details = 18;
+    repeated NextZCDetailStatus next_zc_details = 19;
+    // 计轴的具体报警/原因
+    repeated AxleDetailStatus axle_details = 20;
+
+    repeated ATSDetailStatus ats_details = 21;
+
+    optional uint32 sync_state = 22;
+    optional bool is_ats_float_ip = 23; // ATS的主备机是否为飘IP的方案
+    optional uint32 back_cut_knob_stat = 24; //倒切旋钮状态 0:自动 1:强A 2:强B
+}
+// ZC返回给Client的报文内容
+message ZCClientMsg
+{
+    optional uint32 msg_seq = 1;
+    optional uint64 time_stamp = 2;
+    repeated ZCInfo zc_infos = 3;
+}
+// 板卡电子标签请求报文内容
+message ZCBoardEtagRequestMsg
+{
+    optional uint32 msg_seq = 1; // 序列号
+    optional uint64 time_stamp = 2; // 请求时间
+    optional uint32 work_station = 3; // mss station id
+    optional uint32 board_id = 4;
+}
+// ZC的板卡状态
+message ZCBoardEtagMsg
+{
+    optional uint32 board_id = 1;
+    optional BoardETag board_tag = 2;
+}
+// 板卡版本请求报文内容
+message ZCBoardVerRequestMsg
+{
+    optional uint32 msg_seq = 1; // 序列号
+    optional uint64 time_stamp = 2; // 请求时间
+    optional uint32 work_station = 3; // mss station id
+    optional uint32 board_id = 4;
+}
+// ZC的板卡状态
+message ZCBoardVerMsg
+{
+    optional uint32 board_id = 1;
+    repeated BoardVerInfo board_versions = 2;
+}</textarea>
+        <div style="margin-top:10px;">
+            <button id="loadProtoBtn" class="success">加载 Proto 定义（点一次就行）</button>
+            <span id="protoStatus"></span>
+        </div>
+    </div>
+
+    <!-- 3. 发送区域 -->
+    <div class="row">
+        <label>发送类型：</label>
+        <select id="sendType"></select>
+        <button id="sendBtn" disabled class="primary">发送 Protobuf</button>
+        <span class="tip">Ctrl+Enter 快速发送</span>
+    </div>
+
+    <div id="sendEditor" class="editor" style="display:none;">
+        <strong>要发送的 JSON 数据（会自动编码为二进制）：</strong>
+        <textarea id="sendJson" rows="9"></textarea>
+    </div>
+
+    <!-- 4. 接收解析模式 -->
+    <div class="row">
+        <label>接收解析模式：</label>
+        <select id="receiveMode">
+            <option value="auto">自动尝试所有类型（推荐）</option>
+            <option value="manual">强制指定类型</option>
+        </select>
+        <select id="receiveType" style="display:none;"></select>
+    </div>
+
+    <!-- 5. 连接状态与操作 -->
+    <div id="status" class="status disconnected">未连接</div>
+    <button id="connectBtn" class="primary">连接</button>
+    <button id="disconnectBtn" disabled class="danger">断开连接</button>
+    <button id="clearBtn" style="background: #6c757d;color:white;">清空日志</button>
+
+    <h3>通信日志（收到自动解析为 JSON）</h3>
+    <div id="log" class="log"></div>
+</div>
+
+<script>
+    const STORAGE_KEY_URL = 'ws_proto_url_zc';
+    const STORAGE_KEY_PROTO = 'ws_proto_content_zc';
+
+    const wsUrlInput = document.getElementById('wsUrl');
+    const saveUrlBtn = document.getElementById('saveUrlBtn');
+    const protoText = document.getElementById('protoText');
+    const loadProtoBtn = document.getElementById('loadProtoBtn');
+    const protoStatus = document.getElementById('protoStatus');
+    const sendType = document.getElementById('sendType');
+    const sendJson = document.getElementById('sendJson');
+    const sendEditor = document.getElementById('sendEditor');
+    const sendBtn = document.getElementById('sendBtn');
+    const receiveMode = document.getElementById('receiveMode');
+    const receiveType = document.getElementById('receiveType');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    const clearBtn = document.getElementById('clearBtn');
+
+    let socket = null;
+    let root = null;
+    let messages = {};
+
+    // 加载上次保存的地址
+    wsUrlInput.value = localStorage.getItem(STORAGE_KEY_URL) || wsUrlInput.value;
+
+    // 加载 Proto
+    loadProtoBtn.onclick = async () => {
+        try {
+            root = protobuf.parse(protoText.value, { keepCase: true }).root;
+            messages = {};
+            const options = ['<option value="">请选择消息类型</option>'];
+
+            const collect = (ns, prefix = '') => {
+                Object.values(ns).forEach(item => {
+                    if (item instanceof protobuf.Type) {
+                        const fullName = prefix + item.name;
+                        messages[fullName] = item;
+                        options.push(`<option value="${fullName}">${fullName}</option>`);
+                    } else if (item instanceof protobuf.Namespace) {
+                        collect(item.nested, prefix + item.name + '.');
+                    }
+                });
+            };
+            collect(root.nested);
+
+            sendType.innerHTML = options.join('');
+            receiveType.innerHTML = options.join('');
+            protoStatus.innerHTML = `<span style="color:green">成功加载 ${Object.keys(messages).length} 个消息类型</span>`;
+            localStorage.setItem(STORAGE_KEY_PROTO, protoText.value);
+
+            if (options.length > 1) {
+                sendType.value = 'ZCClientRequestMsg';
+                updateSendEditor();
+            }
+        } catch (e) {
+            protoStatus.innerHTML = `<span style="color:red">解析失败：${e.message}</span>`;
+        }
+    };
+
+    sendType.onchange = updateSendEditor;
+    function updateSendEditor() {
+        if (!sendType.value) { sendEditor.style.display = 'none'; return; }
+        const type = messages[sendType.value];
+        const empty = {};
+        type.fieldsArray.forEach(f => {
+            empty[f.name] = f.repeated ? [] : (f.type === 'string' ? '' : 0);
+        });
+        sendJson.value = JSON.stringify(empty, null, 2);
+        sendEditor.style.display = 'block';
+    }
+
+    receiveMode.onchange = () => receiveType.style.display = receiveMode.value === 'manual' ? 'inline-block' : 'none';
+
+    sendBtn.onclick = () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        if (!sendType.value) return;
+
+        try {
+            const type = messages[sendType.value];
+            const payload = JSON.parse(sendJson.value);
+            const err = type.verify(payload);
+            if (err) throw Error(err);
+
+            const buffer = type.encode(type.create(payload)).finish();
+            socket.send(buffer);
+            log(`发送 ${sendType.value} (${buffer.length} bytes)\n${sendJson.value}`, 'send');
+        } catch (e) {
+            alert('发送失败：' + e.message);
+        }
+    };
+
+    function connect() {
+        if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) return;
+
+        let url = wsUrlInput.value.trim();
+        if (!url.startsWith('ws://')) url = 'ws://' + url.replace(/^wss:\/\//i, '').replace(/^https?:\/\//i, '');
+        setStatus(`正在连接 ${url} ...`, 'connecting');
+        socket = new WebSocket(url);
+        socket.binaryType = 'arraybuffer';
+
+        socket.onopen = () => {
+            setStatus(`已连接：${url}`, 'connected');
+            log('WebSocket 连接成功', 'info');
+            sendBtn.disabled = !sendType.value;
+        };
+
+        socket.onmessage = (e) => {
+            if (typeof e.data === 'string') { log(`收到文本：${e.data}`, 'receive'); return; }
+            const buffer = new Uint8Array(e.data);
+            const len = buffer.length;
+
+            if (receiveMode.value === 'manual' && receiveType.value) {
+                const type = messages[receiveType.value];
+                if (type) {
+                    try {
+                        const msg = type.decode(buffer);
+                        const obj = type.toObject(msg, { defaults: true });
+                        log(`[强制解析] ${receiveType.value} (${len} bytes)\n${JSON.stringify(obj, null, 2)}`, 'receive');
+                        return;
+                    } catch (err) {
+                        log(`[强制解析失败] ${receiveType.value}：${err.message}`, 'error');
+                    }
+                }
+            }
+
+            let decoded = false;
+            for (const [name, type] of Object.entries(messages)) {
+                try {
+                    const msg = type.decode(buffer);
+                    const obj = type.toObject(msg, { defaults: true });
+                    log(`[自动识别] ${name} (${len} bytes)\n${JSON.stringify(obj, null, 2)}`, 'receive');
+                    decoded = true;
+                    break;
+                } catch (_) {}
+            }
+
+            if (!decoded) {
+                log(`收到二进制数据 (${len} bytes)，所有类型均无法解析`, 'receive');
+            }
+        };
+
+        socket.onerror = () => log('WebSocket 错误', 'error');
+        socket.onclose = (e) => {
+            setStatus('连接已关闭', 'disconnected');
+            log(`连接关闭 code=${e.code}`, e.code === 1000 ? 'info' : 'error');
+            socket = null;
+            sendBtn.disabled = true;
+        };
+    }
+
+    function setStatus(text, cls) {
+        statusEl.textContent = text;
+        statusEl.className = 'status ' + cls;
+    }
+
+    function log(msg, type = 'info') {
+        const time = new Date().toLocaleTimeString();
+        const div = document.createElement('div');
+        div.innerHTML = `<strong>[${time}]</strong> ${msg.replace(/\n/g, '<br>')}`;
+        if (type === 'send') div.style.color = '#007bff';
+        if (type === 'receive') div.style.color = '#28a745';
+        if (type === 'error') div.style.color = '#dc3545';
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    saveUrlBtn.onclick = () => {
+        localStorage.setItem(STORAGE_KEY_URL, wsUrlInput.value.trim());
+        if (socket) socket.close();
+        connect();
+    };
+    connectBtn.onclick = connect;
+    disconnectBtn.onclick = () => socket?.close(1000);
+    clearBtn.onclick = () => logEl.innerHTML = '';
+
+    sendJson.addEventListener('keydown', e => {
+        if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); sendBtn.click(); }
+    });
+
+    // 自动加载上次保存的 proto（如果有）
+    const saved = localStorage.getItem(STORAGE_KEY_PROTO);
+    if (saved) {
+        protoText.value = saved;
+        setTimeout(() => loadProtoBtn.click(), 300);
+    } else {
+        // 首次使用也自动加载默认的 ZC 协议
+        setTimeout(() => loadProtoBtn.click(), 300);
+    }
+
+    log('ZC专用 Protobuf 调试工具已就绪！点击 “加载 Proto 定义” → 连接 → 随便发', 'info');
+</script>
+</body>
+</html>
