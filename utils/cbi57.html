@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>SDM → BiIOM 全体机笼故障状态信息报文解析器</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        textarea { width: 100%; height: 120px; font-family: Consolas, monospace; }
+        button { padding: 10px 20px; font-size: 16px; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background: #4CAF50; color: white; }
+        .normal { background: #c8e6c9; }   /* 0x55 */
+        .fault  { background: #ffcdd2; }   /* 0xAA */
+        .absent { background: #fff9c4; }   /* 0x5A */
+        .header { background: #e3f2fd; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<h1>SDM → BiIOM 全体机笼故障状态信息报文解析器 (MSG_ID=0x57)</h1>
+
+<p><strong>使用方法：</strong>把完整的十六进制报文（可带空格或不带）粘贴到下面文本框，点击“解析”。</p>
+
+<textarea id="hexInput" placeholder="例如：aa 05 93 57 19 0c 03 0d 0b 28 00 00 01 8a ..."></textarea>
+<br>
+<button onclick="parse()">解析报文</button>
+
+<div id="result"></div>
+
+<script>
+    // 辅助函数：十六进制字符串转 Uint8Array
+    function hexToBytes(hex) {
+        hex = hex.replace(/[^0-9a-fA-F]/g, '');
+        if (hex.length % 2) hex = '0' + hex;
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < bytes.length; i++) {
+            bytes[i] = parseInt(hex.substr(i*2, 2), 16);
+        }
+        return bytes;
+    }
+
+    // CRC32 (IEEE 802.3) 计算
+    function crc32(buf) {
+        let crc = 0xFFFFFFFF;
+        const poly = 0xEDB88320;
+        for (let i = 0; i < buf.length; i++) {
+            crc ^= buf[i];
+            for (let j = 0; j < 8; j++) {
+                crc = (crc >>> 1) ^ (poly & (-(crc & 1)));
+            }
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function parse() {
+        const input = document.getElementById('hexInput').value.trim();
+        if (!input) {
+            document.getElementById('result').innerHTML = '<p class="error">请粘贴十六进制报文</p>';
+            return;
+        }
+
+        let data;
+        try {
+            data = hexToBytes(input);
+        } catch (e) {
+            document.getElementById('result').innerHTML = '<p class="error">十六进制格式错误</p>';
+            return;
+        }
+
+        let pos = 0;
+
+        // 1. HEADER
+        if (data[pos++] !== 0xAA) {
+            document.getElementById('result').innerHTML = '<p class="error">帧头不是 0xAA</p>';
+            return;
+        }
+
+        // 2. LEN (2字节，小端)
+        const len = data[pos++] | (data[pos++] << 8);
+
+        // 3. MSG_ID
+        if (data[pos++] !== 0x57) {
+            document.getElementById('result').innerHTML = '<p class="error">MSG_ID 不是 0x57</p>';
+            return;
+        }
+
+        // 4. 时间戳 6字节
+        const year  = data[pos++] + 2000;
+        const month = data[pos++];
+        const day   = data[pos++];
+        const hour  = data[pos++];
+        const minute= data[pos++];
+        const second= data[pos++];
+
+        // 5. CBI_ID 4字节 (小端)
+        const cbiId = data[pos++] | (data[pos++] << 8) | (data[pos++] << 16) | (data[pos++] << 24);
+
+        // 6. 机笼个数 N1
+        const cageNum = data[pos++];
+
+        const cages = [];
+
+        for (let c = 0; c < cageNum; c++) {
+            // CAGE_ADDR
+            const cageAddr = data[pos++];
+            // CAGE_STATE
+            const cageStateByte = data[pos++];
+            const cageState = cageStateByte === 0x55 ? '正常' :
+                cageStateByte === 0xAA ? '异常' :
+                    cageStateByte === 0x5A ? '不在位' : '未知';
+
+            // BOARD_NUM
+            const boardNum = data[pos++];
+
+            const boards = [];
+            for (let b = 0; b < boardNum; b++) {
+                // BRD_ID (4字节，小端)
+                const brdId = data[pos++] | (data[pos++] << 8) | (data[pos++] << 16) | (data[pos++] << 24);
+                // HOSE_STATE
+                const hoseByte = data[pos++];
+                const hoseState = hoseByte === 0x55 ? '主机' : hoseByte === 0xAA ? '备机' : '未知';
+                // SAFE_STATE
+                const safeByte = data[pos++];
+                const safeState = safeByte === 0x55 ? '不导向安全' :
+                    safeByte === 0xAA ? '导向安全' :
+                        safeByte === 0x5A ? '单板不在位' : '未知';
+                // REVERSE 4字节 跳过
+                pos += 4;
+
+                boards.push({ brdId, hoseState, safeState });
+            }
+
+            // REVERSE 4字节（机笼预留）
+            pos += 4;
+
+            cages.push({ cageAddr, cageState, cageStateByte, boards });
+        }
+
+        // END
+        if (data[pos++] !== 0x55) {
+            document.getElementById('result').innerHTML = '<p class="error">帧尾不是 0x55</p>';
+            return;
+        }
+
+        // CRC 校验（从 LEN 开始到 END 结束）
+        const crcReported = data[pos++] | (data[pos++] << 8) | (data[pos++] << 16) | (data[pos++] << 24);
+        const crcRange = data.slice(1, pos - 5); // LEN 到 END（不包含 END 和 CRC）
+        const crcCalc = crc32(crcRange);
+
+        const crcOk = crcCalc === crcReported;
+
+        // 输出结果
+        let html = `
+    <h2>解析成功！</h2>
+    <p><strong>时间：</strong>${year}年${month.toString().padStart(2,0)}月${day.toString().padStart(2,0)}日 ${hour.toString().padStart(2,0)}:${minute.toString().padStart(2,0)}:${second.toString().padStart(2,0)}</p>
+    <p><strong>联锁集中站编号（CBI_ID）：</strong>${cbiId}</p>
+    <p><strong>CRC 校验：</strong>${crcOk ? '<span style="color:green">通过</span>' : '<span style="color:red">失败（计算值 0x'+crcCalc.toString(16).padStart(8,'0').toUpperCase()+'，报文值 0x'+crcReported.toString(16).padStart(8,'0').toUpperCase()+'）</span>'}</p>
+    <h3>机笼信息（共 ${cageNum} 个）</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>机笼地址</th>
+          <th>机笼状态</th>
+          <th>单板数量</th>
+          <th>单板详情</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+        cages.forEach(c => {
+            const stateClass = c.cageStateByte === 0x55 ? 'normal' :
+                c.cageStateByte === 0xAA ? 'fault' : 'absent';
+
+            let boardHtml = '<table style="width:100%;font-size:90%;"><tr><th>板卡ID</th><th>主备</th><th>安全状态</th></tr>';
+            c.boards.forEach(b => {
+                const hoseClass = b.hoseState === '主机' ? 'normal' : 'fault';
+                const safeClass = b.safeState === '不导向安全' ? 'normal' :
+                    b.safeState === '导向安全' ? 'fault' : 'absent';
+                boardHtml += `<tr>
+        <td>${b.brdId}</td>
+        <td class="${hoseClass}">${b.hoseState}</td>
+        <td class="${safeClass}">${b.safeState}</td>
+      </tr>`;
+            });
+            boardHtml += '</table>';
+
+            html += `
+      <tr class="${stateClass}">
+        <td>0x${c.cageAddr.toString(16).toUpperCase().padStart(2,'0')}</td>
+        <td>${c.cageState}</td>
+        <td>${c.boards.length}</td>
+        <td style="text-align:left;">${boardHtml}</td>
+      </tr>
+    `;
+        });
+
+        html += `
+      </tbody>
+    </table>
+  `;
+
+        document.getElementById('result').innerHTML = html;
+    }
+</script>
+
+<p><small>支持带空格、不带空格、换行等常见复制格式。<br>
+    状态颜色说明：绿色=正常(0x55)，红色=异常/备机/导向安全(0xAA)，黄色=不在位(0x5A)</small></p>
+
+</body>
+</html>
