@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>联锁 .bin 解析器 - IO机笼区 + 悬停变量信息</title>
+    <style>
+        body {
+            font-family: Consolas, monospace;
+            background: #0d1117;
+            color: #c9d1d9;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        h1, h2, h3 {
+            color: #58a6ff;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+        .file-input {
+            margin: 20px 0;
+            padding: 15px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+        }
+        details {
+            margin: 20px 0;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        summary {
+            padding: 12px 15px;
+            background: #21262d;
+            cursor: pointer;
+            font-weight: bold;
+            color: #58a6ff;
+            user-select: none;
+        }
+        summary:hover {
+            background: #1f6feb22;
+        }
+        .section-content {
+            padding: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: #0d1117;
+        }
+        th, td {
+            border: 1px solid #30363d;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #21262d;
+            color: #58a6ff;
+        }
+        .warning {
+            background: #2f1a00;
+            border-left: 5px solid #ffa657;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 6px;
+            color: #ffa657;
+        }
+        pre {
+            background: #0d1117;
+            padding: 15px;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .var-index {
+            color: #79c0ff;
+            cursor: help;
+            text-decoration: underline dotted;
+        }
+        .var-index:hover {
+            background: #1f6feb22;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>联锁 .bin 文件解析器（含 IO机笼区 + 变量悬停提示）</h1>
+    <div class="file-input">
+        <input type="file" id="fileInput" accept=".bin">
+        <p>选择文件后自动解析（强制大端序）</p>
+    </div>
+    <div id="error" style="background:#490202; padding:15px; border-radius:6px; color:#f85149; white-space:pre-wrap; display:none;"></div>
+    <div id="result" style="display:none;">
+        <details open>
+            <summary>头部关键信息</summary>
+            <div class="section-content">
+                <table id="headerTable"></table>
+            </div>
+        </details>
+        <details open>
+            <summary>数据区位置</summary>
+            <div class="section-content">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>区域</th>
+                        <th>偏移 (hex)</th>
+                        <th>偏移 (dec)</th>
+                        <th>长度 (dec)</th>
+                        <th>结束 + CRC</th>
+                    </tr>
+                    </thead>
+                    <tbody id="zoneTable"></tbody>
+                </table>
+                <div id="fileStatus" class="warning"></div>
+            </div>
+        </details>
+        <details>
+            <summary>逻辑变量区内容解析</summary>
+            <div class="section-content">
+                <div id="logicVarInfo"></div>
+                <h3>逻辑变量列表</h3>
+                <table id="varTable" class="var-table"></table>
+                <h3>缓吸时间信息</h3>
+                <table id="delayTable" class="var-table"></table>
+                <div id="logicCrcStatus" class="warning"></div>
+            </div>
+        </details>
+        <details>
+            <summary>IO机笼区（IO板卡区）内容解析</summary>
+            <div class="section-content">
+                <div id="ioCageInfo"></div>
+                <div id="ioCageTable"></div>
+                <div id="ioCrcStatus" class="warning"></div>
+            </div>
+        </details>
+        <details>
+            <summary>CommPeer区内容解析</summary>
+            <div class="section-content">
+                <div id="commPeerInfo"></div>
+                <div id="commPeerTable"></div>
+                <div id="commCrcStatus" class="warning"></div>
+            </div>
+        </details>
+        <details>
+            <summary>文件前 256 字节（hex dump）</summary>
+            <div class="section-content">
+                <pre id="hexDump"></pre>
+            </div>
+        </details>
+    </div>
+</div>
+<script>
+    // CRC 函数
+    function crc32_ieee(data) {
+        let crc = 0xFFFFFFFF;
+        const poly = 0xEDB88320;
+        for (let byte of data) {
+            crc ^= byte;
+            for (let i = 0; i < 8; i++) {
+                crc = (crc >>> 1) ^ (poly & -(crc & 1));
+            }
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+    function crc32c(data) {
+        let crc = 0xFFFFFFFF;
+        const poly = 0x82F63B78;
+        for (let byte of data) {
+            crc ^= byte;
+            for (let i = 0; i < 8; i++) {
+                crc = (crc >>> 1) ^ (poly & -(crc & 1));
+            }
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+    function toHex(n, pad = 8) {
+        return '0x' + n.toString(16).toUpperCase().padStart(pad, '0');
+    }
+    function hexdump(buf, len = 256) {
+        const bytes = new Uint8Array(buf.slice(0, len));
+        let lines = [];
+        for (let i = 0; i < bytes.length; i += 16) {
+            let hex = Array.from(bytes.subarray(i, i + 16))
+                .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+                .join(' ');
+            let ascii = Array.from(bytes.subarray(i, i + 16))
+                .map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.')
+                .join('');
+            lines.push(i.toString(16).padStart(8, '0') + ' ' + hex.padEnd(47, ' ') + ' ' + ascii);
+        }
+        return lines.join('\n');
+    }
+    function getTypeDesc(type) {
+        let desc = '';
+        if (type === 0x0000) desc = 'NA逻辑变量';
+        if (type & 0x0001) desc += 'IO输入 ';
+        if (type & 0x0002) desc += 'IO输出 ';
+        if (type & 0x0004) desc += 'Comm输入 ';
+        if (type & 0x0008) desc += 'Comm输出 ';
+        if (type & 0x0010) desc += '中间变量 ';
+        if (type & 0x0020) desc += '自保变量 ';
+        if (type & 0x0040) desc += '时间变量 ';
+        if (type & 0x0080) desc += 'Sync输入 ';
+        if (type & 0x0100) desc += 'Sync输出 ';
+        if (type & 0x0200) desc += '系统变量 ';
+        return desc.trim() || '未知类型';
+    }
+    function getVarTitle(idx, varMap) {
+        const info = varMap[idx] || {name: '(未知变量)', desc: '索引超出范围或未定义'};
+        return `序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}`;
+    }
+    document.getElementById('fileInput').addEventListener('change', async e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const errDiv = document.getElementById('error');
+        const resDiv = document.getElementById('result');
+        errDiv.style.display = 'none';
+        resDiv.style.display = 'none';
+        try {
+            const buf = await file.arrayBuffer();
+            const dv = new DataView(buf);
+            if (buf.byteLength < 148) throw new Error(`文件太小 (${buf.byteLength} 字节)`);
+            const getU32 = off => dv.getUint32(off, false);
+            const getU16 = off => dv.getUint16(off, false);
+            const getU8 = off => dv.getUint8(off);
+            // 头部关键字段
+            const signalOffset = getU32(0x68);
+            const signalLen = getU32(0x6C);
+            const ioOffset = getU32(0x70);
+            const ioLen = getU32(0x74);
+            const commOffset = getU32(0x78);
+            const commLen = getU32(0x7C);
+            const syncOffset = getU32(0x80);
+            const syncLen = getU32(0x84);
+            const exprOffset = getU32(0x88);
+            const exprLen = getU32(0x8C);
+            document.getElementById('headerTable').innerHTML = `
+      <tr><th>项目</th><th>值</th></tr>
+      <tr><td>文件大小</td><td>${buf.byteLength.toLocaleString()} 字节</td></tr>
+      <tr><td>字节序</td><td>大端 (强制)</td></tr>
+      <tr><td>逻辑变量区</td><td>${toHex(signalOffset)} / ${signalLen.toLocaleString()} 字节</td></tr>
+      <tr><td>IO板卡区</td><td>${toHex(ioOffset)} / ${ioLen.toLocaleString()} 字节</td></tr>
+      <tr><td>CommPeer区</td><td>${toHex(commOffset)} / ${commLen.toLocaleString()} 字节</td></tr>
+      <tr><td>SyncPeer区</td><td>${toHex(syncOffset)} / ${syncLen.toLocaleString()} 字节</td></tr>
+      <tr><td>逻辑表达式区</td><td>${toHex(exprOffset)} / ${exprLen.toLocaleString()} 字节</td></tr>
+    `;
+            // 数据区表格
+            const zones = [
+                ['逻辑变量区', signalOffset, signalLen],
+                ['IO板卡区', ioOffset, ioLen],
+                ['CommPeer区', commOffset, commLen],
+                ['SyncPeer区', syncOffset, syncLen],
+                ['逻辑表达式区', exprOffset, exprLen]
+            ];
+            let zoneHtml = '';
+            zones.forEach(([name, off, len]) => {
+                zoneHtml += `<tr>
+        <td>${name}</td>
+        <td>${toHex(off)}</td>
+        <td>${off.toLocaleString()}</td>
+        <td>${len.toLocaleString()}</td>
+        <td>${(off + len + 8).toLocaleString()}</td>
+      </tr>`;
+            });
+            document.getElementById('zoneTable').innerHTML = zoneHtml;
+            // 截断判断
+            const maxEnd = Math.max(...zones.map(z => z[1] + z[2] + 8));
+            if (maxEnd > buf.byteLength) {
+                const missing = maxEnd - buf.byteLength;
+                document.getElementById('fileStatus').textContent =
+                    `警告：文件被截断\n预期至少 ${maxEnd.toLocaleString()} 字节\n实际 ${buf.byteLength.toLocaleString()} 字节，缺失约 ${missing.toLocaleString()} 字节`;
+            }
+            // ======================
+            // 解析逻辑变量区 → 构建变量映射表
+            // ======================
+            let varMap = {}; // 序号 → {name, typeDesc}
+            if (signalOffset + signalLen + 8 <= buf.byteLength) {
+                let pos = signalOffset;
+                const N = getU16(pos); pos += 2;
+                for (let i = 0; i < N && pos < signalOffset + signalLen; i++) {
+                    const type = getU16(pos); pos += 2;
+                    const nameLen = getU8(pos); pos += 1;
+                    let name = '';
+                    for (let j = 0; j < nameLen && pos + j < buf.byteLength; j++) {
+                        const c = getU8(pos + j);
+                        if (c === 0) break;
+                        name += String.fromCharCode(c);
+                    }
+                    pos += nameLen;
+                    varMap[i] = {
+                        name: name || '(未知名称)',
+                        type: toHex(type, 4),
+                        desc: getTypeDesc(type)
+                    };
+                }
+                document.getElementById('logicVarInfo').innerHTML = `<p><strong>逻辑变量总数 N = ${N}</strong>（已构建映射表，用于插槽索引悬停提示）</p>`;
+            } else {
+                document.getElementById('logicVarInfo').innerHTML = '<p style="color:#f85149;">逻辑变量区不完整，无法构建变量映射</p>';
+            }
+            // ======================
+            // IO机笼区解析 + 悬停提示
+            // ======================
+            if (ioOffset + ioLen + 8 <= buf.byteLength) {
+                let pos = ioOffset;
+                const cageN = getU16(pos); pos += 2;
+                let cageHtml = `<p><strong>IO机笼总数 N = ${cageN}</strong></p>`;
+                for (let cageIdx = 0; cageIdx < cageN && pos < ioOffset + ioLen; cageIdx++) {
+                    cageHtml += `<h4>机笼 ${cageIdx + 1}</h4><table class="nested-table">`;
+                    const boardAddr = getU8(pos); pos += 1;
+                    const allowedCycle = getU8(pos); pos += 1;
+                    const maxSendCycle = getU8(pos); pos += 1;
+                    const maxSwitchCycle = getU8(pos); pos += 1;
+                    const maxEioCycle = getU8(pos); pos += 1;
+                    const cageAHealth = getU16(pos); pos += 2;
+                    const cageBHealth = getU16(pos); pos += 2;
+                    const statusIdx = getU16(pos); pos += 2;
+                    const slotNum = getU8(pos); pos += 1;
+                    cageHtml += `
+          <tr><th>机笼地址</th><td>${boardAddr}</td></tr>
+          <tr><th>未接收最大周期</th><td>${allowedCycle} (0=不限制)</td></tr>
+          <tr><th>最大间隔发送周期</th><td>${maxSendCycle} (0=每周期发送)</td></tr>
+          <tr><th>全电子道岔采集宽恕</th><td>${maxSwitchCycle}</td></tr>
+          <tr><th>EIO未接收最大周期</th><td>${maxEioCycle}</td></tr>
+          <tr><th>A系健康变量索引</th><td>${cageAHealth === 0xFFFF ? '无 (0xFFFF)' : cageAHealth}</td></tr>
+          <tr><th>B系健康变量索引</th><td>${cageBHealth === 0xFFFF ? '无 (0xFFFF)' : cageBHealth}</td></tr>
+          <tr><th>机笼状态变量索引</th><td>${statusIdx === 0xFFFF ? '无 (0xFFFF)' : statusIdx}</td></tr>
+          <tr><th>插槽数</th><td>${slotNum}</td></tr>
+        </table>`;
+                    // 插槽解析
+                    cageHtml += `<h5>插槽列表（共 ${slotNum} 个）</h5>`;
+                    for (let slotIdx = 0; slotIdx < slotNum && pos < ioOffset + ioLen; slotIdx++) {
+                        const slotType = getU8(pos); pos += 1;
+                        cageHtml += `<details style="margin-left:20px;"><summary>插槽 ${slotIdx + 1} - 类型 0x${slotType.toString(16).toUpperCase()}</summary><div style="padding:10px;">`;
+                        if (slotType === 0x55 || slotType === 0xAA) { // 一般IO输入/输出
+                            const sigLen = getU8(pos); pos += 1;
+                            let signalsHtml = '';
+                            for (let j = 0; j < sigLen; j++) {
+                                const idx = getU16(pos);
+                                pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                signalsHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < sigLen-1 ? ', ' : ''}`;
+                            }
+                            let cutRes = [];
+                            for (let j = 0; j < sigLen; j++) {
+                                cutRes.push(getU8(pos));
+                                pos += 1;
+                            }
+                            const voiLen = getU8(pos); pos += 1;
+                            let voHtml = '', voiHtml = '';
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                voHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                voiHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            cageHtml += `
+              <p><strong>类型</strong>: ${slotType === 0x55 ? '输入板' : '输出板'}</p>
+              <p><strong>逻辑变量数</strong>: ${sigLen}</p>
+              <p><strong>变量索引</strong>: ${signalsHtml || '—'}</p>
+              <p><strong>可切断配置</strong>: ${cutRes.map(v => v === 0x62 ? '可切断' : '不可切断').join(', ')}</p>
+              <p><strong>回采变量数</strong>: ${voiLen}</p>
+              <p><strong>需要回采索引</strong>: ${voHtml || '—'}</p>
+              <p><strong>回采索引</strong>: ${voiHtml || '—'}</p>
+            `;
+                        } else if (slotType === 0x5A || slotType === 0x6A) { // SIG6 / RLB6 信号板
+                            const sigLen = getU8(pos); pos += 1;
+                            let signalsHtml = '';
+                            for (let j = 0; j < sigLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                signalsHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < sigLen-1 ? ', ' : ''}`;
+                            }
+                            const voiLen = getU8(pos); pos += 1;
+                            let voHtml = '', voiHtml = '', veHtml = '', voieHtml = '', rlbGzHtml = '', sigGzHtml = '';
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                voHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                voiHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                veHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                voieHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                rlbGzHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                sigGzHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            cageHtml += `
+              <p><strong>类型</strong>: ${slotType === 0x5A ? 'SIG6信号板' : 'RLB6红灯板'}</p>
+              <p><strong>逻辑变量数</strong>: ${sigLen}</p>
+              <p><strong>变量索引</strong>: ${signalsHtml || '—'}</p>
+              <p><strong>回采变量数</strong>: ${voiLen}</p>
+              <p><strong>需要回采</strong>: ${voHtml || '—'}</p>
+              <p><strong>回采索引</strong>: ${voiHtml || '—'}</p>
+              <p><strong>故障回采</strong>: ${veHtml || '—'}</p>
+              <p><strong>故障回采索引</strong>: ${voieHtml || '—'}</p>
+              <p><strong>RLB故障索引</strong>: ${rlbGzHtml || '— (非RLB6)'}</p>
+              <p><strong>SIG故障索引</strong>: ${sigGzHtml || '— (非SIG6)'}</p>
+            `;
+                        } else if (slotType === 0xA5 || slotType === 0xA6) { // WST5 / WST4
+                            const dcj = getU16(pos); pos += 2;
+                            const fcj = getU16(pos); pos += 2;
+                            const dbj = getU16(pos); pos += 2;
+                            const fbj = getU16(pos); pos += 2;
+                            const sj = getU16(pos); pos += 2;
+                            const wstGz = getU16(pos); pos += 2;
+                            const wstJb = getU16(pos); pos += 2;
+                            const wstGzqd = getU16(pos); pos += 2;
+                            const totalDbj = getU16(pos); pos += 2;
+                            const totalFbj = getU16(pos); pos += 2;
+                            cageHtml += `
+              <p><strong>类型</strong>: ${slotType === 0xA5 ? 'WST5' : 'WST4'} 全电子道岔板</p>
+              <p><strong>定操索引</strong>: <span class="var-index" title="${varMap[dcj]?.desc || '未知'}">${dcj}</span></p>
+              <p><strong>反操索引</strong>: <span class="var-index" title="${varMap[fcj]?.desc || '未知'}">${fcj}</span></p>
+              <p><strong>定表索引</strong>: <span class="var-index" title="${varMap[dbj]?.desc || '未知'}">${dbj}</span></p>
+              <p><strong>反表索引</strong>: <span class="var-index" title="${varMap[fbj]?.desc || '未知'}">${fbj}</span></p>
+              <p><strong>锁闭索引</strong>: <span class="var-index" title="${varMap[sj]?.desc || '未知'}">${sj}</span></p>
+              <p><strong>单板故障索引</strong>: <span class="var-index" title="${varMap[wstGz]?.desc || '未知'}">${wstGz}</span></p>
+              <p><strong>备机索引</strong>: <span class="var-index" title="${varMap[wstJb]?.desc || '未知'}">${wstJb}</span></p>
+              <p><strong>多级牵引切除索引</strong>: <span class="var-index" title="${varMap[wstGzqd]?.desc || '未知'}">${wstGzqd}</span></p>
+              <p><strong>总定表索引</strong>: <span class="var-index" title="${varMap[totalDbj]?.desc || '未知'}">${totalDbj}</span></p>
+              <p><strong>总反表索引</strong>: <span class="var-index" title="${varMap[totalFbj]?.desc || '未知'}">${totalFbj}</span></p>
+            `;
+                        } else if (slotType === 0x7A || slotType === 0x8A || slotType === 0x9A) { // EIB/EOB/NEOB
+                            const sigLen = getU8(pos); pos += 1;
+                            let signalsHtml = '';
+                            for (let j = 0; j < sigLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                signalsHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < sigLen-1 ? ', ' : ''}`;
+                            }
+                            const voiLen = getU8(pos); pos += 1;
+                            let voHtml = '', voiHtml = '';
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                voHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            for (let j = 0; j < voiLen; j++) {
+                                const idx = getU16(pos); pos += 2;
+                                const info = varMap[idx] || {name: '(未知)', desc: '索引超出范围'};
+                                voiHtml += `<span class="var-index" title="序号: ${idx}\n名称: ${info.name}\n类型: ${info.desc}">${idx}</span>${j < voiLen-1 ? ', ' : ''}`;
+                            }
+                            cageHtml += `
+              <p><strong>类型</strong>: ${slotType === 0x7A ? 'EIB' : slotType === 0x8A ? 'EOB' : 'NEOB'}</p>
+              <p><strong>逻辑变量数</strong>: ${sigLen}</p>
+              <p><strong>变量索引</strong>: ${signalsHtml || '—'}</p>
+              <p><strong>回采变量数</strong>: ${voiLen}</p>
+              <p><strong>需要回采</strong>: ${voHtml || '—'}</p>
+              <p><strong>回采索引</strong>: ${voiHtml || '—'}</p>
+            `;
+                        } else {
+                            cageHtml += `<p style="color:#f85149;">未知插槽类型 0x${slotType.toString(16).toUpperCase()}（已跳过解析）</p>`;
+                            pos += 20; // 防止死循环
+                        }
+                        cageHtml += '</div></details>';
+                    }
+                }
+                document.getElementById('ioCageTable').innerHTML = cageHtml;
+                // IO区 CRC
+                const ioCrcPos = ioOffset + ioLen;
+                const ioFileCRC1 = getU32(ioCrcPos);
+                const ioFileCRC2 = getU32(ioCrcPos + 4);
+                const ioContent = new Uint8Array(buf.slice(ioOffset, ioCrcPos));
+                const calcIoCRC1 = crc32c(ioContent);
+                const calcIoCRC2 = crc32_ieee(ioContent);
+                document.getElementById('ioCrcStatus').innerHTML =
+                    `IO机笼区 CRC1: 计算 ${toHex(calcIoCRC1)} | 文件 ${toHex(ioFileCRC1)} → ${calcIoCRC1 === ioFileCRC1 ? '匹配 ✓' : '不匹配 ✗'}<br>` +
+                    `CRC2: 计算 ${toHex(calcIoCRC2)} | 文件 ${toHex(ioFileCRC2)} → ${calcIoCRC2 === ioFileCRC2 ? '匹配 ✓' : '不匹配 ✗'}`;
+            } else {
+                document.getElementById('ioCageInfo').innerHTML = '<p style="color:#f85149;">IO机笼区不完整或越界，无法解析</p>';
+            }
+            // ======================
+            // CommPeer区解析
+            // ======================
+            if (commOffset + commLen + 8 <= buf.byteLength) {
+                let pos = commOffset;
+                const peerN = getU16(pos); pos += 2;
+                let peerHtml = `<p><strong>CommPeer总数 N = ${peerN}</strong></p>`;
+                for (let i = 0; i < peerN && pos < commOffset + commLen; i++) {
+                    peerHtml += `<div class="comm-item"><h4>CommPeer ${i + 1}</h4><table class="nested-table">`;
+                    const nameLen = getU8(pos); pos += 1;
+                    let name = '';
+                    for (let j = 0; j < nameLen && pos + j < buf.byteLength; j++) {
+                        const c = getU8(pos + j);
+                        if (c === 0) break;
+                        name += String.fromCharCode(c);
+                    }
+                    pos += nameLen;
+                    const sid = getU32(pos); pos += 4;
+                    const did = getU32(pos); pos += 4;
+                    const did2 = getU32(pos); pos += 4;
+                    const dataVer = getU32(pos); pos += 4;
+                    const allowedCycle = getU8(pos); pos += 1;
+                    const maxSendCycle = getU8(pos); pos += 1;
+                    const maxCommBreak = getU8(pos); pos += 1;
+                    const linkKind = getU8(pos); pos += 1;
+                    const vitalData = getU8(pos); pos += 1;
+                    const tdbCheck = getU32(pos); pos += 4;
+                    const remoteEqId = getU32(pos); pos += 4;
+                    const inEmapCrc = getU32(pos); pos += 4;
+                    const outEmapCrc = getU32(pos); pos += 4;
+                    const statusSig1 = getU16(pos); pos += 2;
+                    const statusSig2 = getU16(pos); pos += 2;
+                    const commHealth = getU16(pos); pos += 2;
+                    const commStatus = getU16(pos); pos += 2;
+                    const inBmpCrc = getU16(pos); pos += 2;
+                    const outBmpCrc = getU16(pos); pos += 2;
+                    const inSigLen = getU16(pos); pos += 2;
+                    let inSigHtml = '';
+                    for (let j = 0; j < inSigLen; j++) {
+                        const idx = getU16(pos); pos += 2;
+                        inSigHtml += `<span class="var-index" title="${getVarTitle(idx, varMap)}">${idx}</span>${j < inSigLen-1 ? ', ' : ''}`;
+                    }
+                    const outSigLen = getU16(pos); pos += 2;
+                    let outSigHtml = '';
+                    for (let j = 0; j < outSigLen; j++) {
+                        const idx = getU16(pos); pos += 2;
+                        outSigHtml += `<span class="var-index" title="${getVarTitle(idx, varMap)}">${idx}</span>${j < outSigLen-1 ? ', ' : ''}`;
+                    }
+                    const inTypeNum = getU8(pos); pos += 1;
+                    let inCodeHtml = inTypeNum > 0 ? '<p><strong>输入码位通信编码信息：</strong></p>' : '';
+                    for (let j = 0; j < inTypeNum; j++) {
+                        const commType = getU16(pos); pos += 2;
+                        const startIdx = getU16(pos); pos += 2;
+                        const endIdx = getU16(pos); pos += 2;
+                        inCodeHtml += `<p>类型 ${toHex(commType, 4)}: 起始 ${startIdx} → 结束 ${endIdx}</p>`;
+                    }
+                    const outTypeNum = getU8(pos); pos += 1;
+                    let outCodeHtml = outTypeNum > 0 ? '<p><strong>输出码位通信编码信息：</strong></p>' : '';
+                    for (let j = 0; j < outTypeNum; j++) {
+                        const commType = getU16(pos); pos += 2;
+                        const startIdx = getU16(pos); pos += 2;
+                        const endIdx = getU16(pos); pos += 2;
+                        outCodeHtml += `<p>类型 ${toHex(commType, 4)}: 起始 ${startIdx} → 结束 ${endIdx}</p>`;
+                    }
+                    // const psdNum = getU16(pos); pos += 2;
+                    const psdNum = 0; pos += 2;
+                    let psdIds = [];
+                    for (let j = 0; j < psdNum; j++) {
+                        psdIds.push(getU32(pos)); pos += 4;
+                    }
+                    const washNum = getU16(pos); pos += 2;
+                    let washIds = [];
+                    for (let j = 0; j < washNum; j++) {
+                        washIds.push(getU32(pos)); pos += 4;
+                    }
+                    const attrNum = getU16(pos); pos += 2;
+                    let attrHtml = attrNum > 0 ? '<p><strong>附加信息：</strong></p>' : '';
+                    for (let j = 0; j < attrNum; j++) {
+                        const attrType = getU16(pos); pos += 2;
+                        const subNum = getU16(pos); pos += 2;
+                        attrHtml += `<p>属性类型 ${toHex(attrType, 4)} (子属性数 ${subNum})</p>`;
+                        for (let k = 0; k < subNum; k++) {
+                            const subType = getU16(pos); pos += 2;
+                            const subValNum = getU16(pos); pos += 2;
+                            let vals = [];
+                            for (let m = 0; m < subValNum; m++) {
+                                vals.push(getU16(pos)); pos += 2;
+                            }
+                            attrHtml += `<p>  子属性 ${toHex(subType, 4)}: 值 [${vals.join(', ')}]</p>`;
+                        }
+                    }
+                    peerHtml += `
+          <tr><th>名称</th><td>${name || '(无名称)'}</td></tr>
+          <tr><th>本地SID</th><td>${sid}</td></tr>
+          <tr><th>目标DID</th><td>${did}</td></tr>
+          <tr><th>另一系DID2</th><td>${did2 === 0xFFFFFFFF ? '默认 (0xFFFFFFFF)' : did2}</td></tr>
+          <tr><th>数据版本</th><td>${dataVer}</td></tr>
+          <tr><th>未接收最大周期</th><td>${allowedCycle} (0=不限制)</td></tr>
+          <tr><th>最大间隔发送周期</th><td>${maxSendCycle} (0=每周期发送)</td></tr>
+          <tr><th>通信中断报文最大个数</th><td>${maxCommBreak}</td></tr>
+          <tr><th>连接对象标识</th><td>0x${linkKind.toString(16).toUpperCase()}</td></tr>
+          <tr><th>VitalData</th><td>${vitalData === 0x55 ? '安全' : '非安全'}</td></tr>
+          <tr><th>TDB校验</th><td>${toHex(tdbCheck)}</td></tr>
+          <tr><th>对端设备ID</th><td>${remoteEqId === 0xFFFFFFFF ? '默认 (0xFFFFFFFF)' : remoteEqId}</td></tr>
+          <tr><th>输入电子地图CRC</th><td>${toHex(inEmapCrc)}</td></tr>
+          <tr><th>输出电子地图CRC</th><td>${toHex(outEmapCrc)}</td></tr>
+          <tr><th>状态变量索引1</th><td><span class="var-index" title="${getVarTitle(statusSig1, varMap)}">${statusSig1 === 0xFFFF ? '无' : statusSig1}</span></td></tr>
+          <tr><th>状态变量索引2</th><td><span class="var-index" title="${getVarTitle(statusSig2, varMap)}">${statusSig2 === 0xFFFF ? '无' : statusSig2}</span></td></tr>
+          <tr><th>通信好坏统计索引</th><td><span class="var-index" title="${getVarTitle(commHealth, varMap)}">${commHealth === 0xFFFF ? '无' : commHealth}</span></td></tr>
+          <tr><th>通信状态索引</th><td><span class="var-index" title="${getVarTitle(commStatus, varMap)}">${commStatus === 0xFFFF ? '无' : commStatus}</span></td></tr>
+          <tr><th>输入码表CRC</th><td>${toHex(inBmpCrc)}</td></tr>
+          <tr><th>输出码表CRC</th><td>${toHex(outBmpCrc)}</td></tr>
+          <tr><th>输入变量数</th><td>${inSigLen}</td></tr>
+          <tr><th>输入变量索引</th><td>${inSigHtml || '—'}</td></tr>
+          <tr><th>输出变量数</th><td>${outSigLen}</td></tr>
+          <tr><th>输出变量索引</th><td>${outSigHtml || '—'}</td></tr>
+          <tr><th>输入报文类型数</th><td>${inTypeNum}</td></tr>
+          ${inCodeHtml ? `<tr><th>输入编码详情</th><td>${inCodeHtml}</td></tr>` : ''}
+          <tr><th>输出报文类型数</th><td>${outTypeNum}</td></tr>
+          ${outCodeHtml ? `<tr><th>输出编码详情</th><td>${outCodeHtml}</td></tr>` : ''}
+          <tr><th>关联PSD门数</th><td>${psdNum}</td></tr>
+          <tr><th>PSD ID</th><td>${psdIds.join(', ') || '—'}</td></tr>
+          <tr><th>关联洗车机数</th><td>${washNum}</td></tr>
+          <tr><th>洗车机ID</th><td>${washIds.join(', ') || '—'}</td></tr>
+          ${attrHtml ? `<tr><th>附加信息</th><td>${attrHtml}</td></tr>` : ''}
+        </table></div>`;
+                }
+                document.getElementById('commPeerTable').innerHTML = peerHtml;
+                // CommPeer区 CRC
+                const commCrcPos = commOffset + commLen;
+                const commFileCRC1 = getU32(commCrcPos);
+                const commFileCRC2 = getU32(commCrcPos + 4);
+                const commContent = new Uint8Array(buf.slice(commOffset, commCrcPos));
+                const calcCommCRC1 = crc32c(commContent);
+                const calcCommCRC2 = crc32_ieee(commContent);
+                document.getElementById('commCrcStatus').innerHTML =
+                    `CommPeer区 CRC1: 计算 ${toHex(calcCommCRC1)} | 文件 ${toHex(commFileCRC1)} → ${calcCommCRC1 === commFileCRC1 ? '匹配 ✓' : '不匹配 ✗'}<br>` +
+                    `CRC2: 计算 ${toHex(calcCommCRC2)} | 文件 ${toHex(commFileCRC2)} → ${calcCommCRC2 === commFileCRC2 ? '匹配 ✓' : '不匹配 ✗'}`;
+            } else {
+                document.getElementById('commPeerInfo').innerHTML = '<p style="color:#f85149;">CommPeer区不完整或越界，无法解析</p>';
+            }
+            document.getElementById('hexDump').textContent = hexdump(buf);
+            resDiv.style.display = 'block';
+        } catch (err) {
+            errDiv.textContent = `解析失败：\n${err.message}\n\n文件大小: ${file?.size?.toLocaleString() || '未知'} 字节`;
+            errDiv.style.display = 'block';
+        }
+    });
+</script>
+</body>
+</html>
