@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>计轴报警报文解析器（支持上传配置文件）</title>
+    <title>计轴报警报文解析器（支持上传 XML 或 Excel）</title>
+    <!-- 使用 jsDelivr 稳定 CDN + 最新版本 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: "Microsoft YaHei", sans-serif; background:#f5f5f5; margin:20px; line-height:1.6; }
         h1, h2 { color:#2c3e50; }
@@ -24,11 +26,11 @@
     </style>
 </head>
 <body>
-<h1>计轴 → BiIOM 报警报文解析器（支持上传配置文件）</h1>
+<h1>计轴 → BiIOM 报警报文解析器（支持上传 XML 或 Excel）</h1>
 
 <div class="upload-area">
-    <p>第一步：上传配置文件（.xml）</p>
-    <input type="file" id="configFile" accept=".xml" />
+    <p>第一步：上传配置文件（.xml 或 .xlsx）</p>
+    <input type="file" id="configFile" accept=".xml,.xlsx" />
     <button onclick="loadConfig()">加载配置文件</button>
     <div id="configStatus">尚未加载配置文件</div>
 </div>
@@ -42,87 +44,158 @@
 
 <script>
     // ===================== 全局变量 =====================
-    let config = null; // 存储解析后的配置对象
+    let config = null;
 
-    // ===================== 加载并解析 XML 配置文件 =====================
+    // ===================== 加载配置文件 =====================
     function loadConfig() {
         const fileInput = document.getElementById('configFile');
         const statusDiv = document.getElementById('configStatus');
         const parseBtn = document.getElementById('parseBtn');
 
         if (!fileInput.files.length) {
-            statusDiv.innerHTML = '<span class="warn">请先选择一个 .xml 文件</span>';
+            statusDiv.innerHTML = '<span class="warn">请先选择一个 .xml 或 .xlsx 文件</span>';
             return;
         }
 
         const file = fileInput.files[0];
         const reader = new FileReader();
 
-        reader.onload = function(e) {
-            const xmlText = e.target.result;
-            try {
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-
-                config = {
-                    secAlarms: [],
-                    sensorAlarms: [],
-                    amplifierBoards: [],
-                    axleBoards: [],
-                    outputBoards: [],
-                    commBoards: []
-                };
-
-                // 读取 SecAlarms
-                xmlDoc.querySelectorAll('SecAlarms Item').forEach(item => {
-                    config.secAlarms.push(item.getAttribute('Name'));
-                });
-
-                // SensorAlarms
-                xmlDoc.querySelectorAll('SensorAlarms Item').forEach(item => {
-                    config.sensorAlarms.push(item.getAttribute('Name'));
-                });
-
-                // AmplifierBoardAlarms
-                xmlDoc.querySelectorAll('AmplifierBoardAlarms Item').forEach(item => {
-                    config.amplifierBoards.push(item.getAttribute('Name'));
-                });
-
-                // AxleBoardAlarms
-                xmlDoc.querySelectorAll('AxleBoardAlarms Item').forEach(item => {
-                    config.axleBoards.push(item.getAttribute('Name'));
-                });
-
-                // OutputBoardAlarms
-                xmlDoc.querySelectorAll('OutputBoardAlarms Item').forEach(item => {
-                    config.outputBoards.push(item.getAttribute('Name'));
-                });
-
-                // CommunicationBoardAlarms（每块板 2 个 CPU）
-                xmlDoc.querySelectorAll('CommunicationBoardAlarms Item').forEach(item => {
-                    const name = item.getAttribute('Name');
-                    config.commBoards.push(`${name} CPU0`);
-                    config.commBoards.push(`${name} CPU1`);
-                });
-
-                statusDiv.innerHTML = `<span class="normal">配置文件加载成功！</span><br>
-                        • 区段: ${config.secAlarms.length} 个<br>
-                        • 传感器: ${config.sensorAlarms.length} 个<br>
-                        • 放大板: ${config.amplifierBoards.length} 个<br>
-                        • 计轴板: ${config.axleBoards.length} 个<br>
-                        • 输出板: ${config.outputBoards.length} 个<br>
-                        • 通信板 CPU: ${config.commBoards.length} 个`;
-
-                parseBtn.disabled = false;
-            } catch (err) {
-                statusDiv.innerHTML = `<span class="warn">XML 解析失败：${err.message}</span>`;
-            }
-        };
-
-        reader.readAsText(file);
+        if (file.name.endsWith('.xml')) {
+            reader.onload = function(e) {
+                parseXmlConfig(e.target.result, statusDiv, parseBtn);
+            };
+            reader.readAsText(file);
+        } else if (file.name.endsWith('.xlsx')) {
+            reader.onload = function(e) {
+                parseExcelConfig(e.target.result, statusDiv, parseBtn);
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            statusDiv.innerHTML = '<span class="warn">不支持的文件格式（仅支持 .xml 或 .xlsx）</span>';
+        }
     }
 
-    // ===================== 解析报文 =====================
+    // ===================== XML 解析 =====================
+    function parseXmlConfig(xmlText, statusDiv, parseBtn) {
+        try {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+            config = {
+                secAlarms: [],
+                sensorAlarms: [],
+                amplifierBoards: [],
+                axleBoards: [],
+                outputBoards: [],
+                commBoards: []
+            };
+
+            xmlDoc.querySelectorAll('SecAlarms Item').forEach(item => config.secAlarms.push(item.getAttribute('Name')));
+            xmlDoc.querySelectorAll('SensorAlarms Item').forEach(item => config.sensorAlarms.push(item.getAttribute('Name')));
+            xmlDoc.querySelectorAll('AmplifierBoardAlarms Item').forEach(item => config.amplifierBoards.push(item.getAttribute('Name')));
+            xmlDoc.querySelectorAll('AxleBoardAlarms Item').forEach(item => config.axleBoards.push(item.getAttribute('Name')));
+            xmlDoc.querySelectorAll('OutputBoardAlarms Item').forEach(item => config.outputBoards.push(item.getAttribute('Name')));
+
+            xmlDoc.querySelectorAll('CommunicationBoardAlarms Item').forEach(item => {
+                const name = item.getAttribute('Name');
+                config.commBoards.push(`${name} CPU0`);
+                config.commBoards.push(`${name} CPU1`);
+            });
+
+            updateConfigStatus(statusDiv, parseBtn);
+        } catch (err) {
+            statusDiv.innerHTML = `<span class="warn">XML 解析失败：${err.message}</span>`;
+        }
+    }
+
+    // ===================== Excel 解析 =====================
+    function parseExcelConfig(arrayBuffer, statusDiv, parseBtn) {
+        try {
+            // 检查 XLSX 是否加载成功
+            if (typeof XLSX === 'undefined') {
+                throw new Error("XLSX 库未加载成功，请检查网络或刷新页面重试");
+            }
+
+            const workbook = XLSX.read(arrayBuffer, {type: 'array'});
+
+            config = {
+                secAlarms: [],
+                sensorAlarms: [],
+                amplifierBoards: [],
+                axleBoards: [],
+                outputBoards: [],
+                commBoards: []
+            };
+
+            // 区段信息
+            const secSheet = workbook.Sheets['区段信息'];
+            if (secSheet) {
+                const data = XLSX.utils.sheet_to_json(secSheet, {header: 1});
+                for (let i = 2; i < data.length; i++) {
+                    const row = data[i];
+                    if (row && row[2]) config.secAlarms.push(row[2]);
+                }
+            }
+
+            // 传感器信息
+            const sensorSheet = workbook.Sheets['传感器信息'];
+            if (sensorSheet) {
+                const data = XLSX.utils.sheet_to_json(sensorSheet, {header: 1});
+                for (let i = 2; i < data.length; i++) {
+                    const row = data[i];
+                    if (row && row[2]) config.sensorAlarms.push(row[2]);
+                }
+            }
+
+            // 板卡信息（只提取有报文序号的放大板/计轴板/输出板/通信板）
+            const boardSheet = workbook.Sheets['板卡信息'];
+            if (boardSheet) {
+                const data = XLSX.utils.sheet_to_json(boardSheet, {header: 1});
+                const boards = [];
+                for (let i = 2; i < data.length; i++) {
+                    const row = data[i];
+                    if (row && row.length >= 7) {
+                        const seqStr = row[1];
+                        const type = row[3];
+                        let name = row[7] || ''; // 相关设备/区段
+                        if (!name && row[4] && row[5] && row[6]) {
+                            name = `机柜${row[4]}第${row[5]}层第${row[6]}槽位的${type}`;
+                        }
+                        if (seqStr !== '-1' && name && ['放大板','计轴板','输出板','通信板'].includes(type)) {
+                            boards.push({seq: parseInt(seqStr), name, type});
+                        }
+                    }
+                }
+                boards.sort((a,b) => a.seq - b.seq);
+
+                boards.forEach(b => {
+                    if (b.type === '通信板') {
+                        config.commBoards.push(`${b.name} CPU0`);
+                        config.commBoards.push(`${b.name} CPU1`);
+                    } else if (b.type === '放大板') config.amplifierBoards.push(b.name);
+                    else if (b.type === '计轴板') config.axleBoards.push(b.name);
+                    else if (b.type === '输出板') config.outputBoards.push(b.name);
+                });
+            }
+
+            updateConfigStatus(statusDiv, parseBtn);
+        } catch (err) {
+            statusDiv.innerHTML = `<span class="warn">Excel 解析失败：${err.message}</span>`;
+        }
+    }
+
+    function updateConfigStatus(statusDiv, parseBtn) {
+        statusDiv.innerHTML = `<span class="normal">配置文件加载成功！</span><br>
+                • 区段: ${config.secAlarms.length} 个<br>
+                • 传感器: ${config.sensorAlarms.length} 个<br>
+                • 放大板: ${config.amplifierBoards.length} 个<br>
+                • 计轴板: ${config.axleBoards.length} 个<br>
+                • 输出板: ${config.outputBoards.length} 个<br>
+                • 通信板 CPU: ${config.commBoards.length} 个`;
+        parseBtn.disabled = false;
+    }
+
+    // ===================== 报文解析（同之前） =====================
     function parseMessage() {
         if (!config) {
             document.getElementById('result').innerHTML = '<span class="warn">请先加载配置文件！</span>';
@@ -156,7 +229,6 @@
         let pos = 0;
         let html = '<h2>解析结果</h2>';
 
-        // 头部信息
         html += `<div class="section">`;
         html += `<strong>HEADER</strong>: 0xAA<br>`;
         pos++;
@@ -164,7 +236,6 @@
         pos += 2;
         html += `<strong>MSG_ID</strong>: 0x${bytes[pos++].toString(16).padStart(2,'0')} (报警报文)<br>`;
 
-        // 时间戳
         const y = bytes[pos++].toString(16).padStart(2,'0');
         const m = bytes[pos++].toString(16).padStart(2,'0');
         const d = bytes[pos++].toString(16).padStart(2,'0');
@@ -173,68 +244,61 @@
         const s = bytes[pos++].toString(16).padStart(2,'0');
         html += `<strong>时间</strong>: 20${y}-${m}-${d} ${h}:${min}:${s}<br>`;
 
-        // SN
         const sn = ((bytes[pos] << 24) | (bytes[pos+1] << 16) | (bytes[pos+2] << 8) | bytes[pos+3]) >>> 0;
         html += `<strong>SN</strong>: ${sn} (0x${sn.toString(16).toUpperCase().padStart(8,'0')})<br>`;
         pos += 4;
 
-        // AXLE_INDEX
         const axleIdx = (bytes[pos] << 8) | bytes[pos+1];
         html += `<strong>AXLE_INDEX</strong>: ${axleIdx} (0x${axleIdx.toString(16).padStart(4,'0')})<br>`;
         pos += 2;
         html += '</div>';
 
-        // ===================== 区段报警 =====================
-        html += '<div class="section"><h3>区段报警状态 (SecAlarms)</h3><table>';
-        html += '<tr><th>序号</th><th>名称</th><th>状态</th></tr>';
+        // 区段报警
+        html += '<div class="section"><h3>区段报警状态</h3><table><tr><th>序号</th><th>名称</th><th>状态</th></tr>';
         for (let i = 0; i < config.secAlarms.length && pos < bytes.length; i++) {
             const val = bytes[pos++];
             const status = val === 0x01 ? '<span class="normal">正常</span>' : (val === 0x02 ? '<span class="alarm">报警</span>' : `<span class="warn">未知(${val.toString(16)})</span>`);
-            html += `<tr><td>${i}</td><td>${config.secAlarms[i]}</td><td>${status}</td></tr>`;
+            html += `<tr><td>${i+1}</td><td>${config.secAlarms[i]}</td><td>${status}</td></tr>`;
         }
         html += '</table></div>';
 
-        // ===================== 传感器报警 =====================
-        html += '<div class="section"><h3>传感器报警状态 (SensorAlarms)</h3><table>';
-        html += '<tr><th>序号</th><th>名称</th><th>状态</th></tr>';
+        // 传感器报警（类似）
+        html += '<div class="section"><h3>传感器报警状态</h3><table><tr><th>序号</th><th>名称</th><th>状态</th></tr>';
         for (let i = 0; i < config.sensorAlarms.length && pos < bytes.length; i++) {
             const val = bytes[pos++];
             const status = val === 0x01 ? '<span class="normal">正常</span>' : (val === 0x02 ? '<span class="alarm">报警</span>' : `<span class="warn">未知(${val.toString(16)})</span>`);
-            html += `<tr><td>${i}</td><td>${config.sensorAlarms[i]}</td><td>${status}</td></tr>`;
+            html += `<tr><td>${i+1}</td><td>${config.sensorAlarms[i]}</td><td>${status}</td></tr>`;
         }
         html += '</table></div>';
 
-        // ===================== 放大板 =====================
-        html += '<div class="section"><h3>放大板状态 (AmplifierBoardAlarms)</h3><table>';
-        html += '<tr><th>序号</th><th>名称</th><th>状态</th></tr>';
+        // 放大板
+        html += '<div class="section"><h3>放大板状态</h3><table><tr><th>序号</th><th>名称</th><th>状态</th></tr>';
         for (let i = 0; i < config.amplifierBoards.length && pos < bytes.length; i++) {
             const val = bytes[pos++];
             const status = val === 0x01 ? '<span class="normal">正常</span>' : (val === 0x02 ? '<span class="alarm">异常</span>' : `<span class="warn">未知(${val.toString(16)})</span>`);
-            html += `<tr><td>${i}</td><td>${config.amplifierBoards[i]}</td><td>${status}</td></tr>`;
+            html += `<tr><td>${i+1}</td><td>${config.amplifierBoards[i]}</td><td>${status}</td></tr>`;
         }
         html += '</table></div>';
 
-        // ===================== 计轴板 =====================
-        html += '<div class="section"><h3>计轴板状态 (AxleBoardAlarms)</h3><table>';
-        html += '<tr><th>序号</th><th>名称</th><th>状态</th></tr>';
+        // 计轴板
+        html += '<div class="section"><h3>计轴板状态</h3><table><tr><th>序号</th><th>名称</th><th>状态</th></tr>';
         for (let i = 0; i < config.axleBoards.length && pos < bytes.length; i++) {
             const val = bytes[pos++];
             const status = val === 0x01 ? '<span class="normal">正常</span>' : (val === 0x02 ? '<span class="alarm">异常</span>' : `<span class="warn">未知(${val.toString(16)})</span>`);
-            html += `<tr><td>${i}</td><td>${config.axleBoards[i]}</td><td>${status}</td></tr>`;
+            html += `<tr><td>${i+1}</td><td>${config.axleBoards[i]}</td><td>${status}</td></tr>`;
         }
         html += '</table></div>';
 
-        // ===================== 输出板 =====================
-        html += '<div class="section"><h3>输出板状态 (OutputBoardAlarms)</h3><table>';
-        html += '<tr><th>序号</th><th>名称</th><th>状态</th></tr>';
+        // 输出板
+        html += '<div class="section"><h3>输出板状态</h3><table><tr><th>序号</th><th>名称</th><th>状态</th></tr>';
         for (let i = 0; i < config.outputBoards.length && pos < bytes.length; i++) {
             const val = bytes[pos++];
             const status = val === 0x01 ? '<span class="normal">正常</span>' : (val === 0x02 ? '<span class="alarm">异常</span>' : `<span class="warn">未知(${val.toString(16)})</span>`);
-            html += `<tr><td>${i}</td><td>${config.outputBoards[i]}</td><td>${status}</td></tr>`;
+            html += `<tr><td>${i+1}</td><td>${config.outputBoards[i]}</td><td>${status}</td></tr>`;
         }
         html += '</table></div>';
 
-        // ===================== AXLE_TYPE_NUM =====================
+        // AXLE_TYPE_NUM
         if (pos + 1 < bytes.length && bytes[pos] === 0x00 && bytes[pos+1] === 0x03) {
             html += '<div class="section"><strong>AXLE_TYPE_NUM</strong>: 0x0003 (固定值)</div>';
             pos += 2;
@@ -242,7 +306,7 @@
             html += '<div class="section"><span class="warn">未找到 AXLE_TYPE_NUM 0x0003</span></div>';
         }
 
-        // ===================== 通信板 =====================
+        // 通信板
         html += '<div class="section"><h3>通信板 CPU 状态与故障码</h3>';
         for (let i = 0; i < config.commBoards.length && pos + 2 < bytes.length; i++) {
             const status = bytes[pos++];
@@ -253,11 +317,13 @@
         }
         html += '</div>';
 
-        // ===================== 剩余字段（电源/机柜/告警） =====================
+        // 剩余
         html += '<div class="section"><h3>剩余字段（电源/机柜/告警）</h3>';
+        let remaining = '';
         while (pos < bytes.length - 1) {
-            html += `0x${bytes[pos++].toString(16).padStart(2,'0')} `;
+            remaining += `0x${bytes[pos++].toString(16).padStart(2,'0')} `;
         }
+        html += remaining;
         if (pos < bytes.length) {
             const axleErr = bytes[pos++];
             html += `<br><strong>AXLE_ERROR</strong>: 0x${axleErr.toString(16).padStart(2,'0')} → ${axleErr === 0x01 ? '<span class="alarm">有告警</span>' : axleErr === 0x02 ? '<span class="normal">无告警</span>' : '初始化'}</div>`;
