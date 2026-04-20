@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBI Info WebSocket 测试页面（带Redis模拟）</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        h1 { color: #2c3e50; }
+        button { padding: 8px 16px; margin: 5px; font-size: 14px; cursor: pointer; }
+        .section { border: 1px solid #ddd; padding: 15px; margin: 15px 0; border-radius: 6px; background: #fafafa; }
+        textarea { width: 100%; height: 120px; font-family: Consolas, monospace; font-size: 13px; }
+        #log {
+            height: 380px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background: #f9f9f9;
+            font-family: Consolas, monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+        input[type="number"], input[type="text"] { padding: 6px; width: 180px; }
+    </style>
+</head>
+<body>
+<h1>🧪 CBI Info WebSocket 测试工具（带 Redis 设置）</h1>
+
+<!-- WebSocket 连接区域 -->
+<div class="section">
+    <h2>1. WebSocket 连接</h2>
+    <label>WebSocket 地址：</label>
+    <input type="text" id="wsUrl" value="ws://localhost:8080/cbi/info" style="width: 420px;">
+    <button onclick="connect()">连接</button>
+    <button onclick="disconnect()">断开</button>
+</div>
+
+<!-- 订阅区域 -->
+<div class="section">
+    <h2>2. 订阅 CBI</h2>
+    <label>cbi_id：</label>
+    <input type="number" id="cbiId" value="1">
+    <button onclick="subscribeCbi()">订阅此 CBI</button>
+</div>
+
+<!-- 新增：设置 Redis 数据区域 -->
+<div class="section">
+    <h2>3. 模拟设置 Redis 数据（测试推送效果）</h2>
+    <label>cbi_id：</label>
+    <input type="number" id="redisCbiId" value="1"><br><br>
+
+    <label>Redis Value (JSON 格式)：</label><br>
+    <textarea id="redisValue" placeholder='{"cbi_id":1,"name":"测试设备","status":1,"value":123.45,"timestamp":"2026-04-17T17:38:00Z"}'>
+{"cbi_id":1,"name":"测试CBI设备","status":1,"temperature":36.5,"humidity":65,"updateTime":"2026-04-17 17:38:00"}</textarea><br>
+
+    <button onclick="setRedisData()">设置 Redis 数据并触发推送</button>
+    <button onclick="clearRedisValue()">清空内容</button>
+</div>
+
+<button onclick="clearLog()">清空日志</button>
+
+<h3>日志输出：</h3>
+<div id="log"></div>
+
+<script>
+    let socket = null;
+    const API_BASE = "http://localhost:8080";   // ← 如果你的后端端口或域名不同，请修改这里
+
+    function log(message, type = 'info') {
+        const logDiv = document.getElementById('log');
+        const time = new Date().toLocaleTimeString();
+        let color = type === 'error' ? 'red' : type === 'success' ? 'green' : type === 'send' ? 'blue' : '#000';
+        logDiv.innerHTML += `<span style="color:${color}">[${time}] ${message}</span><br>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // ====================== WebSocket 操作 ======================
+    function connect() {
+        const url = document.getElementById('wsUrl').value.trim();
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            log("已处于连接状态", "error");
+            return;
+        }
+
+        socket = new WebSocket(url);
+
+        socket.onopen = () => log("✅ WebSocket 连接成功！", "success");
+        socket.onmessage = (event) => log("📥 收到推送: " + event.data);
+        socket.onclose = (e) => log(`❌ 连接关闭 (Code: ${e.code})`);
+        socket.onerror = () => log("❌ WebSocket 错误", "error");
+    }
+
+    function disconnect() {
+        if (socket) {
+            socket.close();
+            socket = null;
+            log("已主动断开连接");
+        }
+    }
+
+    function subscribeCbi() {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            log("请先连接 WebSocket！", "error");
+            return;
+        }
+        const cbiId = document.getElementById('cbiId').value.trim();
+        if (!cbiId) return log("请输入 cbi_id", "error");
+
+        const msg = JSON.stringify({ "cbi_id": parseInt(cbiId) });
+        socket.send(msg);
+        log(`📤 发送订阅: ${msg}`, "send");
+    }
+
+    // ====================== 新增：设置 Redis ======================
+    async function setRedisData() {
+        const cbiId = document.getElementById('redisCbiId').value.trim();
+        let value = document.getElementById('redisValue').value.trim();
+
+        if (!cbiId) {
+            log("请输入 cbi_id", "error");
+            return;
+        }
+        if (!value) {
+            log("请输入 Redis Value (JSON)", "error");
+            return;
+        }
+
+        // 尝试美化 JSON（可选）
+        try {
+            value = JSON.stringify(JSON.parse(value), null, 2);
+            document.getElementById('redisValue').value = value;
+        } catch (e) {
+            log("JSON 格式错误，请检查输入", "error");
+            return;
+        }
+
+        const redisKey = `iom:cloud:cbi:RT:cbi_info:${cbiId}`;
+
+        try {
+            const response = await fetch(`${API_BASE}/api/redis/set`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: redisKey,
+                    value: value,
+                    expire: 3600   // 可选：设置过期时间（秒）
+                })
+            });
+
+            if (response.ok) {
+                log(`✅ Redis 数据已更新！Key: ${redisKey}`, "success");
+                log("⏳ 等待1秒后定时器将推送最新数据...");
+            } else {
+                log(`❌ 设置失败，状态码: ${response.status}`, "error");
+            }
+        } catch (err) {
+            log(`❌ 请求失败: ${err.message}（请确认后端是否提供 /api/redis/set 接口）`, "error");
+        }
+    }
+
+    function clearRedisValue() {
+        document.getElementById('redisValue').value = '';
+    }
+
+    function clearLog() {
+        document.getElementById('log').innerHTML = '';
+    }
+
+    // 回车支持
+    document.getElementById('cbiId').addEventListener('keypress', e => { if (e.key === 'Enter') subscribeCbi(); });
+    document.getElementById('redisCbiId').addEventListener('keypress', e => { if (e.key === 'Enter') setRedisData(); });
+
+    // 页面卸载时断开连接
+    window.onbeforeunload = () => { if (socket) socket.close(); };
+</script>
+</body>
+</html>

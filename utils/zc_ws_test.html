@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZC Protobuf 测试工具 - 已修复嵌套类型</title>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.6/dist/protobuf.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+        h1 { color: #2c3e50; }
+        .section { border: 1px solid #ccc; padding: 18px; background: white; border-radius: 8px; margin-bottom: 20px; }
+        button { padding: 10px 18px; margin: 5px; cursor: pointer; font-size: 14px; border-radius: 4px; }
+        input, textarea { padding: 8px; margin: 5px 0; font-family: Consolas, monospace; }
+        #log { height: 480px; overflow-y: auto; border: 1px solid #999; padding: 12px; background: #f1f1f1; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .send { color: #007bff; }
+        .receive { color: #6f42c1; }
+    </style>
+</head>
+<body>
+<h1>🔧 ZC WebSocket 测试工具（Protobuf 二进制 + Redis 存二进制）</h1>
+
+<div class="section">
+    <h2>1. WebSocket 连接</h2>
+    <input type="text" id="wsUrl" value="ws://localhost:8080/zc/info" style="width:520px;">
+    <button onclick="connect()">连接 ZC</button>
+    <button onclick="disconnect()">断开</button>
+</div>
+
+<div class="section">
+    <h2>2. 发送请求</h2>
+    <label>work_station: </label><input type="number" id="work_station" value="1"><br><br>
+    <label>work_device: </label><input type="number" id="work_device" value="1"><br><br>
+    <label>msg_seq: </label><input type="number" id="msg_seq" value="1001"><br><br>
+    <label>time_stamp: </label><input type="text" id="time_stamp" readonly style="width:220px;">
+    <button onclick="updateTimestamp()">刷新</button><br><br>
+    <button onclick="sendZcRequest()" style="background:#007bff;color:white;">发送 Protobuf 请求</button>
+</div>
+
+<div class="section">
+    <h2>3. 设置 Redis（Protobuf 二进制）</h2>
+    <label>work_station: </label><input type="number" id="setStation" value="1"><br><br>
+    <label>ZCInfo 数据 (JSON)：</label><br>
+    <textarea id="zcValue" style="width:100%;height:200px;">
+{
+  "zc_id": 1,
+  "station_id": 1,
+  "is_offLine": 0,
+  "zc_stat": 0,
+  "host_only": 1,
+  "sync_state": 1,
+  "back_cut_knob_stat": 0,
+  "app_ver": "V1.2.3",
+  "plt_ver": "V2.0",
+  "zc_board_stats": [],
+  "next_zc_net_stats": [],
+  "cbi_details": [],
+  "train_details": [],
+  "axle_details": [],
+  "ats_details": []
+}</textarea><br>
+    <button onclick="setZcRedisBinary()" style="background:#28a745;color:white;">转为Protobuf二进制存Redis</button>
+</div>
+
+<div class="section">
+    <h2>日志 <button onclick="clearLog()">清空</button></h2>
+    <div id="log"></div>
+</div>
+
+<script>
+    let socket = null;
+    let root = null;
+    let ZCClientRequestMsg = null;
+    let ZCClientMsg = null;
+    let ZCInfo = null;
+
+    const API_BASE = "http://localhost:8080";
+
+    function log(msg, type = '') {
+        const logDiv = document.getElementById('log');
+        const time = new Date().toLocaleTimeString();
+        let color = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : type === 'send' ? '#007bff' : type === 'receive' ? '#6f42c1' : '#000';
+        logDiv.innerHTML += `<span style="color:${color}">[${time}] ${msg}</span><br>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function updateTimestamp() {
+        document.getElementById('time_stamp').value = Date.now().toString();
+    }
+
+    // 完整 Proto 定义（已包含所有依赖的嵌套类型）
+    async function loadProto() {
+        if (root) return;
+
+        const protoContent = `syntax="proto2";
+package MSS.ZC;
+
+message ZCClientRequestMsg {
+    optional uint32 msg_seq = 1;
+    optional uint64 time_stamp = 2;
+    optional uint32 work_station = 3;
+    optional uint32 work_device = 4;
+}
+
+message ZCClientMsg {
+    optional uint32 msg_seq = 1;
+    optional uint64 time_stamp = 2;
+    repeated ZCInfo zc_infos = 3;
+}
+
+message ZCInfo {
+    optional uint32 zc_id = 1;
+    optional uint32 station_id = 2;
+    optional uint32 is_offLine = 3;
+    optional uint32 zc_stat = 4;
+    optional uint32 vote_a = 5;
+    optional uint32 vote_b = 6;
+    optional uint32 host_only = 7;
+    optional string app_ver = 8;
+    optional string plt_ver = 9;
+    optional string cfg_ver = 10;
+    optional string zcm_ver = 11;
+    repeated ZCBoardStatus zc_board_stats = 12;
+    optional uint32 ats_net_stat = 13;
+    optional uint32 cc_net_stat = 14;
+    optional uint32 cbi_net_stat = 15;
+    repeated NextZCNetStatus next_zc_net_stats = 16;
+    repeated CBIDetailStatus cbi_details = 17;
+    repeated TrainDetailStatus train_details = 18;
+    repeated NextZCDetailStatus next_zc_details = 19;
+    repeated AxleDetailStatus axle_details = 20;
+    repeated ATSDetailStatus ats_details = 21;
+    optional uint32 sync_state = 22;
+    optional bool is_ats_float_ip = 23;
+    optional uint32 back_cut_knob_stat = 24;
+}
+
+message ZCBoardStatus {
+    optional uint32 board_id = 1;
+    optional uint32 board_device_status = 2;
+    optional uint32 bit_all_status = 3;
+    optional uint32 bit_all_alarm_status = 4;
+}
+
+message NextZCNetStatus {
+    optional uint32 zc_id = 1;
+    optional uint32 net_status = 2;
+    optional uint32 net_comm_index = 3;
+}
+
+message CBIDetailStatus {
+    optional uint32 cbi_id = 1;
+    optional uint32 cbi_status = 2;
+    optional uint32 cbi_comm_index = 3;
+}
+
+message TrainDetailStatus {
+    optional uint32 train_pvid = 1;
+    optional uint32 train_status = 2;
+    optional uint32 train_comm_index = 3;
+}
+
+message NextZCDetailStatus {
+    optional uint32 zc_id = 1;
+    optional uint32 zc_status = 2;
+    optional uint32 zc_comm_index = 3;
+}
+
+message AxleDetailStatus {
+    optional uint32 trace_id = 1;
+    optional uint32 trace_status = 2;
+}
+
+message ATSDetailStatus {
+    optional uint32 ats_status = 1;
+    optional uint32 ats_comm_index = 2;
+}
+
+// 其他 message（如 BoardVerInfo、BoardETag 等）可根据需要继续添加
+`;
+
+        const result = protobuf.parse(protoContent, { keepCase: true });
+        root = result.root;
+        ZCClientRequestMsg = root.lookupType("MSS.ZC.ZCClientRequestMsg");
+        ZCClientMsg = root.lookupType("MSS.ZC.ZCClientMsg");
+        ZCInfo = root.lookupType("MSS.ZC.ZCInfo");
+
+        log("✅ Protobuf 完整定义加载成功", "success");
+    }
+
+    async function connect() {
+        await loadProto();
+        const url = document.getElementById('wsUrl').value.trim();
+        socket = new WebSocket(url);
+        socket.binaryType = "arraybuffer";
+
+        socket.onopen = () => log("✅ WebSocket 连接成功", "success");
+        socket.onmessage = (event) => {
+            if (event.data instanceof ArrayBuffer) {
+                const bytes = new Uint8Array(event.data);
+                log(`📥 收到二进制消息 (${bytes.length} 字节)`, "receive");
+                try {
+                    const decoded = ZCClientMsg.decode(bytes);
+                    const obj = ZCClientMsg.toObject(decoded, { defaults: true, arrays: true });
+                    log("✅ 解码成功：\n" + JSON.stringify(obj, null, 2));
+                } catch (e) {
+                    log("⚠️ 解码失败: " + e.message);
+                }
+            }
+        };
+    }
+
+    function disconnect() { if (socket) socket.close(); }
+
+    async function sendZcRequest() {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return log("请先连接", "error");
+
+        const payload = {
+            msg_seq: parseInt(document.getElementById('msg_seq').value) || 1,
+            time_stamp: BigInt(document.getElementById('time_stamp').value || Date.now()),
+            work_station: parseInt(document.getElementById('work_station').value) || 0,
+            work_device: parseInt(document.getElementById('work_device').value) || 0
+        };
+
+        const msg = ZCClientRequestMsg.create(payload);
+        const buffer = ZCClientRequestMsg.encode(msg).finish();
+        socket.send(buffer);
+        log(`📤 发送请求成功 (${buffer.length} 字节)`, "send");
+    }
+
+    async function setZcRedisBinary() {
+        await loadProto();
+        const station = parseInt(document.getElementById('setStation').value);
+        let jsonText = document.getElementById('zcValue').value.trim();
+
+        if (!station || !jsonText) return log("参数不能为空", "error");
+
+        const redisKey = `iom:cloud:zc:RT:zc_info:${station}`;
+
+        try {
+            const data = JSON.parse(jsonText);
+            const zcInfos = Array.isArray(data) ? data : [data];
+
+            const message = ZCClientMsg.create({
+                msg_seq: 999,
+                time_stamp: BigInt(Date.now()),
+                zc_infos: zcInfos.map(item => ZCInfo.create(item))
+            });
+
+            const binary = ZCClientMsg.encode(message).finish();
+            const base64 = btoa(String.fromCharCode(...binary));
+
+            const res = await fetch(`${API_BASE}/test/zc/info`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ key: redisKey, value: base64 })
+            });
+
+            if (res.ok) {
+                log(`✅ Protobuf 二进制已存入 Redis！Key = ${redisKey}`, "success");
+            } else {
+                log("❌ Redis 设置失败", "error");
+            }
+        } catch (e) {
+            log("❌ 失败: " + e.message, "error");
+        }
+    }
+
+    function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+    window.onload = () => {
+        updateTimestamp();
+        loadProto();
+    };
+    window.onbeforeunload = () => { if (socket) socket.close(); };
+</script>
+</body>
+</html>
