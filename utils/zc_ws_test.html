@@ -23,7 +23,7 @@
 
 <div class="section">
     <h2>1. WebSocket 连接</h2>
-    <input type="text" id="wsUrl" value="ws://localhost:8080/zc/info" style="width:520px;">
+    <input type="text" id="wsUrl" value="ws://localhost:8888/zc/info" style="width:520px;">
     <button onclick="connect()">连接 ZC</button>
     <button onclick="disconnect()">断开</button>
 </div>
@@ -40,6 +40,9 @@
 
 <div class="section">
     <h2>3. 设置 Redis（Protobuf 二进制）</h2>
+    <label>接口地址：</label>
+    <input type="text" id="apiUrl" value="http://localhost:8888/test/zc/info" style="width: 420px;">
+
     <label>work_station: </label><input type="number" id="setStation" value="1"><br><br>
     <label>ZCInfo 数据 (JSON)：</label><br>
     <textarea id="zcValue" style="width:100%;height:200px;">
@@ -75,7 +78,6 @@
     let ZCClientMsg = null;
     let ZCInfo = null;
 
-    const API_BASE = "http://localhost:8080";
 
     function log(msg, type = '') {
         const logDiv = document.getElementById('log');
@@ -250,8 +252,9 @@ message ATSDetailStatus {
 
             const binary = ZCClientMsg.encode(message).finish();
             const base64 = btoa(String.fromCharCode(...binary));
+            const url = document.getElementById('apiUrl').value.trim();
 
-            const res = await fetch(`${API_BASE}/test/zc/info`, {
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ key: redisKey, value: base64 })
