@@ -137,7 +137,7 @@
         const redisKey = `iom:cloud:cbi:RT:cbi_info:${cbiId}`;
 
         try {
-            const response = await fetch(`${API_BASE}/api/redis/set`, {
+            const response = await fetch(`${API_BASE}/test/cbi/info`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
