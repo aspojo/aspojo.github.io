@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>asd</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<header class="bg-blue-600 text-white p-4">
+    <h1 class="text-2xl font-bold">asd</h1>
+</header>
+
+<nav class="container mx-auto p-4">
+    <div id="menu-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Menu items will be dynamically inserted here -->
+    </div>
+</nav>
+
+<script>
+    // Sample data structure
+    const menuData = [
+        {
+            "title": "51CTO试题",
+            "menus": [{
+                "title": "案例分析题",
+                "url": "./asd/case.html"
+            }, {
+                "title": "论文",
+                "url": "./asd/essay.html"
+            }
+            ]
+        },
+        {
+            "title": "我的材料",
+            "menus": [{
+                "title": "论软件系统的可靠性设计与应用",
+                "url": "./asd/myEssay.html"
+            }, {
+                "title": "论遗留系统的演进与改造策略及应用",
+                "url": "./asd/myEssay2.html"
+            }
+            ]
+        }
+    ];
+
+    // Function to render menu items
+    function renderMenus() {
+        const container = document.getElementById('menu-container');
+
+        menuData.forEach(section => {
+            const sectionDiv = document.createElement('div');
+            sectionDiv.className = 'bg-white rounded-lg shadow-md p-4';
+
+            // Section title
+            const sectionTitle = document.createElement('h2');
+            sectionTitle.className = 'text-xl font-semibold mb-3 text-blue-600';
+            sectionTitle.textContent = section.title;
+            sectionDiv.appendChild(sectionTitle);
+
+            // Menu items
+            const ul = document.createElement('ul');
+            ul.className = 'space-y-2';
+
+            section.menus.forEach(menu => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = menu.url;
+                a.className = 'block text-blue-500 hover:text-blue-700 hover:underline';
+                a.textContent = menu.title;
+                a.target = '_blank';
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+
+            sectionDiv.appendChild(ul);
+            container.appendChild(sectionDiv);
+        });
+    }
+
+    // Render menus when page loads
+    document.addEventListener('DOMContentLoaded', renderMenus);
+</script>
+</body>
+</html>

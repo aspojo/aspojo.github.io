@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统架构设计师考试范文 - 遗留系统深度演进版</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #2980b9;
+            --bg-color: #f0f2f5;
+        }
+        body {
+            font-family: "SimSun", "STSong", serif;
+            background-color: var(--bg-color);
+            line-height: 1.8;
+            padding: 40px 20px;
+        }
+        .paper-container {
+            max-width: 950px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 80px 100px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        h1 { text-align: center; font-size: 26px; margin-bottom: 40px; color: var(--primary-color); }
+        .abstract {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 25px;
+            margin-bottom: 35px;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        h2 { font-size: 20px; border-bottom: 2px solid var(--accent-color); padding-bottom: 5px; margin-top: 40px; color: var(--primary-color); }
+        h3 { font-size: 17px; margin-top: 30px; color: #34495e; font-weight: bold; }
+        p { text-indent: 2em; margin-bottom: 18px; text-align: justify; }
+        .tech-tag { font-weight: bold; color: #c0392b; }
+        .case-detail {
+            background: #fdfaf0;
+            border-left: 5px solid #f1c40f;
+            padding: 15px;
+            margin: 20px 0;
+            font-size: 15px;
+        }
+        footer { text-align: center; margin-top: 50px; font-size: 13px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="paper-container">
+    <h1>论遗留系统的演进与改造策略及应用</h1>
+
+    <div class="abstract">
+        <strong>摘要：</strong>
+        2025年12月，我参与了某市轨道交通线网监控与维护支持系统（MSS）的架构演进重构项目。该系统原有的核心逻辑基于C++编写，采用传统的C/S架构，随着城市地铁线路的爆炸式增长，系统在并发处理、跨平台兼容性以及维护成本方面均触及了物理瓶颈。作为项目首席架构师，我主持了将该遗留系统向基于Java分布式微服务架构平滑演进的工作。本文探讨了遗留系统重构中的策略权衡，重点阐述了如何运用“绞杀者模式”实现业务的不间断平滑迁移，并通过构建“反腐败层（ACL）”异构转换网关、引入Protobuf契约协议，解决了新旧系统共存期间的数据一致性与端口配置冲突问题。项目上线后，系统平均可用性达到99.999%，核心链路吞吐量提升至重构前的5倍，为后续智慧化城轨运营奠定了坚实的架构基础。
+    </div>
+
+    <h2>一、 遗留系统的现状分析与演进背景</h2>
+    <p>城市轨道交通信号监控系统是保障行车安全的核心。该市地铁3号线原有的监控系统始建于十年前，其核心逻辑深度绑定在C++与MFC框架之上。随着地铁进入线网化运营阶段，该遗留系统暴露出了三个致命缺陷：</p>
+    <p>首先是<span class="tech-tag">性能瓶颈与扩展性危机</span>。原有系统采用单进程多线程模型，在面对全线网30余个车站、数万个传感器节点的并发数据流时，内存地址空间受限，且频繁出现由死锁导致的系统“假死”。其次是<span class="tech-tag">协议孤岛与数据割裂</span>。旧系统采用非标的二进制报文，与现代工业物联网（IIoT）平台无法无缝对接，导致维护成本呈指数级上升。最后是<span class="tech-tag">配置治理困难</span>。由于C++源码中存在大量的硬编码配置，端口映射、服务地址等关键参数的任何微调都需要重新编译发布，极大地制约了运维时效。</p>
+    <p>2025年底，公司决定对该系统进行分布式云化重构。作为架构师，我面临的最大挑战是：地铁线路24小时处于待机或运营状态，重构必须像“在高速行驶的列车上换轮子”一样，确保业务零中断。因此，我制定了以“绞杀者模式”为核心，通过构建异构适配层实现渐进式演进的总体方案。</p>
+
+    <h2>二、 演进策略的选择与权衡</h2>
+    <p>在讨论重构策略时，团队内部曾出现过“推倒重做（Big Bang）”与“渐进改造”的争论。我通过对比矩阵分析后认为，直接推倒重来对于高安全要求的地铁系统而言风险不可控。最终，我们选择了<span class="tech-tag">绞杀者模式 (Strangler Fig Pattern)</span>。</p>
+    <p>该策略的核心在于，我们不在旧系统内部进行大规模修改，而是在其周边逐步构建新的Java微服务。通过一个智能的路由转发层，将新的功能请求逐步引导至新架构。对于旧系统，我们通过构建<span class="tech-tag">反腐败层 (Anti-Corruption Layer, ACL)</span>来保护新架构。ACL作为异构通信的“翻译官”，将旧有的C++字节流转换为新架构易于理解的领域对象模型。这不仅保证了新架构的“整洁度”，也极大降低了重构初期的技术风险。</p>
+
+    <h2>三、 核心演进过程的技术实现细节</h2>
+
+    <h3>1. 异构系统通信的“标准化”重构</h3>
+    <p>针对您提到的“端口与协议一致性”这一核心痛点，我们废弃了原有的结构体直接透传方式。我引入了<span class="tech-tag">Protobuf (Protocol Buffers)</span>协议。在C++端，我们利用其跨语言特性生成对应的解析桩；在Java端，则利用Netty框架构建异步非阻塞的通信网关。为了解决端口配置不一致的问题，我设计了一个<span class="tech-tag">动态服务注册与发现机制</span>。车站端的C++接入层在启动时，会向ZooKeeper注册中心查询其对应的云端解析端口，由中心端动态下发路由规则。这种设计彻底解决了手动配置端口易出错的隐患，实现了“配置自愈”。</p>
+
+    <h3>2. 数据层面的平滑迁移：双写与CDC技术</h3>
+    <p>数据迁移是系统演进中最具挑战的环节。由于旧系统使用SQL Server，新架构采用MySQL+Redis，数据结构发生了巨大变化。我们实施了“三步走”战略：</p>
+    <div class="case-detail">
+        <strong>数据迁移三步走策略：</strong><br>
+        1. <b>影子写入阶段：</b> 保持旧库写入为主，通过CDC（数据变更捕获）技术实时同步至新库，不影响现网业务。<br>
+        2. <b>逻辑双写阶段：</b> 在Java接入层实现双写逻辑，所有传感器数据同时发送至两端，并在后台进行自动化比对，验证新旧架构的业务逻辑一致性。<br>
+        3. <b>读写权切换：</b> 经过两个月的灰度观察，在确认数据一致性达到100%后，分批次将32个车站的读写权限引导至新架构。
+    </div>
+
+    <h3>3. 分布式环境下的流量治理与高可用保障</h3>
+    <p>重构后的微服务架构增加了网络调用开销，为了补偿性能，我引入了<span class="tech-tag">Sentinel</span>实现了全链路流量控制。针对地铁业务的特性，我定义了严格的优先级策略：将“行车联锁信号”设为特权级，保障其在高并发下的CPU抢占权；将“设备自检日志”设为低优先级，在高负载时进行自动降级。同时，通过引入分布式缓存Redis，缓解了数据库在高并发下的读写压力，使得系统的整体吞吐量较旧架构提升了400%以上。</p>
+
+    <h2>四、 实施效果与架构反思</h2>
+    <p>经过六个月的渐进式演进，该项目成功实现了核心监控业务的平滑迁移。实际运营数据显示，系统在双休日的大流量冲击下表现稳定，故障自动恢复时间（MTTR）从原来的15分钟缩短至30秒以内。最令维保人员满意的是，通过Protobuf协议的引入，原本因C++编译器字节对齐导致的“幽灵报错”彻底消失了。</p>
+    <p><b>反思与总结：</b> 遗留系统的演进并非单纯的技术升级，而是一场深刻的架构折中艺术。在本项目中，利用“反腐败层”隔离新旧技术栈是成功的关键。作为架构师，不能仅关注新技术，更要尊重旧系统的历史价值。未来的工作方向将聚焦于利用AI技术对采集到的海量异构数据进行深度挖掘，实现从“被动监控”向“主动维保”的智慧跃升。</p>
+
+    <footer>
+        [ 2026年系统架构设计师考试备考范文 | 预估字数：约 2550 字 ]
+    </footer>
+</div>
+
+</body>
+</html>
