@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音乐乐龄 - 首页</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", sans-serif;
+            background: #f5f0e6;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+        .phone {
+            width: 380px;
+            background: white;
+            border-radius: 40px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border: 12px solid #333;
+        }
+        .header {
+            background: linear-gradient(135deg, #ff9f1c, #ff6b00);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: url('https://picsum.photos/id/64/200/200') center/cover;
+            border: 3px solid white;
+        }
+        .points {
+            background: rgba(255,255,255,0.9);
+            color: #ff6b00;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 15px;
+        }
+        .banner {
+            height: 190px;
+            background: url('https://picsum.photos/id/1015/800/400') center/cover;
+            position: relative;
+        }
+        .banner-text {
+            position: absolute;
+            bottom: 25px;
+            left: 20px;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+        }
+        .quick-btns {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            padding: 20px;
+        }
+        .btn {
+            background: #fff;
+            border-radius: 16px;
+            padding: 14px 6px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(255, 107, 0, 0.15);
+            font-size: 13.5px;
+            cursor: pointer;
+        }
+        .btn:hover { transform: scale(1.05); }
+        .section {
+            padding: 0 20px 25px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #333;
+        }
+        .ranking {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        .rank-item {
+            text-align: center;
+            min-width: 70px;
+        }
+        .rank-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin: 0 auto 6px;
+        }
+        .exchange-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        .exchange-item {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        .exchange-item img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+        }
+        .exchange-info {
+            padding: 10px;
+        }
+        .exchange-info .points {
+            color: #ff6b00;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .community {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 30px;
+        }
+        .community img {
+            border-radius: 12px;
+            width: 170px;
+            height: 115px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+<div class="phone">
+    <!-- 顶部 Header -->
+    <div class="header">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <div class="avatar"></div>
+            <div>
+                <div style="font-size:16px;">张阿姨</div>
+                <div style="font-size:13px; opacity:0.9;">第12名</div>
+            </div>
+        </div>
+        <div>
+            <div class="points">888 积分</div>
+        </div>
+    </div>
+
+    <!-- Banner -->
+    <div class="banner">
+        <div class="banner-text">
+            <h2>音乐乐龄课堂</h2>
+            <p>让晚年生活充满旋律</p>
+        </div>
+    </div>
+
+    <!-- 快捷按钮 -->
+    <div class="quick-btns">
+        <div class="btn" onclick="alert('今日签到成功！+20积分')">📅<br>今日签到</div>
+        <div class="btn" onclick="alert('分享成功！获得30积分')">🔗<br>裂变分享</div>
+        <div class="btn" onclick="alert('进入积分排行榜')">🏆<br>积分排行</div>
+        <div class="btn" onclick="alert('进入积分兑换中心')">🎁<br>积分兑换</div>
+    </div>
+
+    <!-- 积分排行 -->
+    <div class="section">
+        <div class="section-title">本周积分排行</div>
+        <div class="ranking">
+            <div class="rank-item">
+                <div class="rank-avatar" style="background:url('https://picsum.photos/id/64/100') center/cover"></div>
+                <div>王奶奶</div>
+                <div style="color:#ff6b00; font-size:12px;">1260</div>
+            </div>
+            <div class="rank-item">
+                <div class="rank-avatar" style="background:url('https://picsum.photos/id/91/100') center/cover"></div>
+                <div>李叔叔</div>
+                <div style="color:#ff6b00; font-size:12px;">980</div>
+            </div>
+            <div class="rank-item">
+                <div class="rank-avatar" style="background:url('https://picsum.photos/id/201/100') center/cover"></div>
+                <div>张阿姨</div>
+                <div style="color:#ff6b00; font-size:12px;">888</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 积分兑换专区 -->
+    <div class="section">
+        <div class="section-title">积分兑换 <span style="font-size:14px; color:#ff6b00;">(热门)</span></div>
+        <div class="exchange-grid">
+            <div class="exchange-item" onclick="alert('兑换成功！已扣除200积分')">
+                <img src="https://picsum.photos/id/180/300/200" alt="保温杯">
+                <div class="exchange-info">
+                    <div>精美保温杯</div>
+                    <div class="points">200 积分</div>
+                </div>
+            </div>
+            <div class="exchange-item" onclick="alert('兑换成功！已扣除350积分')">
+                <img src="https://picsum.photos/id/201/300/200" alt="音乐U盘">
+                <div class="exchange-info">
+                    <div>古典音乐U盘</div>
+                    <div class="points">350 积分</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 社区动态 -->
+    <div class="section">
+        <div class="section-title">社区精彩分享</div>
+        <div class="community">
+            <img src="https://picsum.photos/id/201/180/120" alt="学员分享">
+            <img src="https://picsum.photos/id/237/180/120" alt="学员分享">
+            <img src="https://picsum.photos/id/180/180/120" alt="学员分享">
+        </div>
+    </div>
+</div>
+</body>
+</html>
