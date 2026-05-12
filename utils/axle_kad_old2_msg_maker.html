@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAZ II 计轴系统状态帧报文组装工具</title>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 { text-align: center; color: #0066cc; }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #e6f0ff;
+        }
+        input, select {
+            padding: 6px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0055aa;
+        }
+        .result {
+            background: #e8f5e8;
+            padding: 15px;
+            border: 1px solid #4caf50;
+            border-radius: 6px;
+            font-family: monospace;
+            word-break: break-all;
+            margin-top: 15px;
+        }
+        .hex {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .note { color: #d32f2f; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>TAZ II 计轴监测系统 - 状态帧报文组装工具</h1>
+    <p style="text-align:center;color:#666;">根据《TAZ II计轴监测系统与外部监测设备接口协议 V2.2》生成状态帧（帧类型 0）</p>
+
+    <div class="section">
+        <h2>1. 基本配置</h2>
+        <label>计轴区段数量: <input type="number" id="axleCount" value="4" min="1" max="100"></label><br><br>
+        <label>传感器数量: <input type="number" id="sensorCount" value="8" min="1" max="200"></label><br><br>
+        <label>放大板数量: <input type="number" id="ampCount" value="2" min="1" max="20"></label><br><br>
+        <label>计轴板数量: <input type="number" id="axleBoardCount" value="2" min="1" max="20"></label><br><br>
+        <label>输出板数量: <input type="number" id="outputBoardCount" value="2" min="1" max="20"></label><br><br>
+        <label>监测机柜数量: <input type="number" id="cabinetCount" value="2" min="1" max="10"></label>
+    </div>
+
+    <div class="section">
+        <h2>2. 计轴区段状态</h2>
+        <table id="axleTable"></table>
+    </div>
+
+    <div class="section">
+        <h2>3. 传感器状态</h2>
+        <table id="sensorTable"></table>
+    </div>
+
+    <div class="section">
+        <h2>4. 板卡及机柜状态</h2>
+        <table id="boardTable"></table>
+    </div>
+
+    <div style="text-align:center;">
+        <button onclick="generateFrame()">生成状态帧报文</button>
+        <button onclick="clearAll()">清空</button>
+    </div>
+
+    <div class="section">
+        <h2>生成结果 <span class="note">(CRC低字节在前)</span></h2>
+        <div id="result" class="result">
+            点击“生成状态帧报文”按钮后在此处显示报文
+        </div>
+        <button onclick="copyResult()">复制报文</button>
+    </div>
+</div>
+
+<script>
+    const CrcCcittTable = [ /* ... 表内容与之前相同 ... */
+        0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
+        0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
+        0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
+        0x9339, 0x8318, 0xB37B, 0xA35A, 0xD3BD, 0xC39C, 0xF3FF, 0xE3DE,
+        0x2462, 0x3443, 0x0420, 0x1401, 0x64E6, 0x74C7, 0x44A4, 0x5485,
+        0xA56A, 0xB54B, 0x8528, 0x9509, 0xE5EE, 0xF5CF, 0xC5AC, 0xD58D,
+        0x3653, 0x2672, 0x1611, 0x0630, 0x76D7, 0x66F6, 0x5695, 0x46B4,
+        0xB75B, 0xA77A, 0x9719, 0x8738, 0xF7DF, 0xE7FE, 0xD79D, 0xC7BC,
+        0x48C4, 0x58E5, 0x6886, 0x78A7, 0x0840, 0x1861, 0x2802, 0x3823,
+        0xC9CC, 0xD9ED, 0xE98E, 0xF9AF, 0x8948, 0x9969, 0xA90A, 0xB92B,
+        0x5AF5, 0x4AD4, 0x7AB7, 0x6A96, 0x1A71, 0x0A50, 0x3A33, 0x2A12,
+        0xDBFD, 0xCBDC, 0xFBBF, 0xEB9E, 0x9B79, 0x8B58, 0xBB3B, 0xAB1A,
+        0x6CA6, 0x7C87, 0x4CE4, 0x5CC5, 0x2C22, 0x3C03, 0x0C60, 0x1C41,
+        0xEDAE, 0xFD8F, 0xCDEC, 0xDDCD, 0xAD2A, 0xBD0B, 0x8D68, 0x9D49,
+        0x7E97, 0x6EB6, 0x5ED5, 0x4EF4, 0x3E13, 0x2E32, 0x1E51, 0x0E70,
+        0xFF9F, 0xEFBE, 0xDFDD, 0xCFFC, 0xBF1B, 0xAF3A, 0x9F59, 0x8F78,
+        0x9188, 0x81A9, 0xB1CA, 0xA1EB, 0xD10C, 0xC12D, 0xF14E, 0xE16F,
+        0x1080, 0x00A1, 0x30C2, 0x20E3, 0x5004, 0x4025, 0x7046, 0x6067,
+        0x83B9, 0x9398, 0xA3FB, 0xB3DA, 0xC33D, 0xD31C, 0xE37F, 0xF35E,
+        0x02B1, 0x1290, 0x22F3, 0x32D2, 0x4235, 0x5214, 0x6277, 0x7256,
+        0xB5EA, 0xA5CB, 0x95A8, 0x8589, 0xF56E, 0xE54F, 0xD52C, 0xC50D,
+        0x34E2, 0x24C3, 0x14A0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
+        0xA7DB, 0xB7FA, 0x8799, 0x97B8, 0xE75F, 0xF77E, 0xC71D, 0xD73C,
+        0x26D3, 0x36F2, 0x0691, 0x16B0, 0x6657, 0x7676, 0x4615, 0x5634,
+        0xD94C, 0xC96D, 0xF90E, 0xE92F, 0x99C8, 0x89E9, 0xB98A, 0xA9AB,
+        0x5844, 0x4865, 0x7806, 0x6827, 0x18C0, 0x08E1, 0x3882, 0x28A3,
+        0xCB7D, 0xDB5C, 0xEB3F, 0xFB1E, 0x8BF9, 0x9BD8, 0xABBB, 0xBB9A,
+        0x4A75, 0x5A54, 0x6A37, 0x7A16, 0x0AF1, 0x1AD0, 0x2AB3, 0x3A92,
+        0xFD2E, 0xED0F, 0xDD6C, 0xCD4D, 0xBDAA, 0xAD8B, 0x9DE8, 0x8DC9,
+        0x7C26, 0x6C07, 0x5C64, 0x4C45, 0x3CA2, 0x2C83, 0x1CE0, 0x0CC1,
+        0xEF1F, 0xFF3E, 0xCF5D, 0xDF7C, 0xAF9B, 0xBFBA, 0x8FD9, 0x9FF8,
+        0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0
+    ];
+
+    function crc16ccitt(buf) {
+        let crc = 0;
+        for (let i = 0; i < buf.length; i++) {
+            let j = (crc >> 8) ^ buf[i];
+            crc = ((crc << 8) & 0xFFFF) ^ CrcCcittTable[j];
+        }
+        return crc;
+    }
+
+    function byteToHex(b) {
+        return b.toString(16).padStart(2, '0').toUpperCase();
+    }
+
+    function generateTables() {
+        const axleCount = parseInt(document.getElementById('axleCount').value) || 4;
+        let html = `<tr><th>序号</th><th>计轴区段ID</th><th>状态</th><th>含义</th></tr>`;
+        for (let i = 0; i < axleCount; i++) {
+            html += `<tr><td>${i+1}</td><td>204${i.toString().padStart(2,'0')}</td>
+                <td><select id="axle_${i}">
+                    <option value="0">0 - 初始化</option>
+                    <option value="1" selected>1 - 硬件占用</option>
+                    <option value="2">2 - 硬件空闲</option>
+                    <option value="17">17 - 24V故障</option>
+                    <option value="65">65 - 24V正常</option>
+                </select></td><td><span id="axle_meaning_${i}">硬件占用</span></td></tr>`;
+        }
+        document.getElementById('axleTable').innerHTML = html;
+
+        const sensorCount = parseInt(document.getElementById('sensorCount').value) || 8;
+        html = `<tr><th>序号</th><th>传感器ID</th><th>状态</th><th>含义</th></tr>`;
+        for (let i = 0; i < sensorCount; i++) {
+            html += `<tr><td>${i+1}</td><td>104${i.toString().padStart(2,'0')}</td>
+                <td><select id="sensor_${i}">
+                    <option value="0">0 - 初始化</option>
+                    <option value="1">1 - 12V故障</option>
+                    <option value="2" selected>2 - 传感器正常</option>
+                    <option value="4">4 - 12V正常</option>
+                </select></td><td><span id="sensor_meaning_${i}">传感器正常</span></td></tr>`;
+        }
+        document.getElementById('sensorTable').innerHTML = html;
+
+        // 板卡表格（省略部分代码，保持与之前一致）
+        const ampCount = parseInt(document.getElementById('ampCount').value) || 2;
+        const axleBoardCount = parseInt(document.getElementById('axleBoardCount').value) || 2;
+        const outputBoardCount = parseInt(document.getElementById('outputBoardCount').value) || 2;
+        const cabinetCount = parseInt(document.getElementById('cabinetCount').value) || 2;
+
+        html = `<tr><th>类型</th><th>序号</th><th>状态</th></tr>`;
+        for (let i = 0; i < ampCount; i++) html += `<tr><td>放大板</td><td>${i}</td><td><select id="amp_${i}"><option value="1" selected>1-在位</option><option value="0">0-初始化</option><option value="2">2-不在位</option></select></td></tr>`;
+        for (let i = 0; i < axleBoardCount; i++) html += `<tr><td>计轴板</td><td>${i}</td><td><select id="axleboard_${i}"><option value="1" selected>1-在位</option><option value="0">0-初始化</option><option value="2">2-不在位</option></select></td></tr>`;
+        for (let i = 0; i < outputBoardCount; i++) html += `<tr><td>输出板</td><td>${i}</td><td><select id="outputboard_${i}"><option value="1" selected>1-在位</option><option value="0">0-初始化</option><option value="2">2-不在位</option></select></td></tr>`;
+        for (let i = 0; i < cabinetCount; i++) html += `<tr><td>机柜${i}</td><td>${i}</td><td><select id="cabinet_${i}"><option value="1" selected>1-通信正常</option><option value="0">0-初始化</option><option value="2">2-通信故障</option></select></td></tr>`;
+        html += `<tr><td>下位机告警驱动</td><td>-</td><td><select id="alarm"><option value="2" selected>2-无告警</option><option value="1">1-有告警</option><option value="0">0-初始化</option></select></td></tr>`;
+
+        document.getElementById('boardTable').innerHTML = html;
+    }
+
+    function getDataDomain() {
+        const bytes = [];
+        const axleCount = parseInt(document.getElementById('axleCount').value) || 4;
+        for (let i = 0; i < axleCount; i++) bytes.push(parseInt(document.getElementById(`axle_${i}`).value) || 0);
+
+        const sensorCount = parseInt(document.getElementById('sensorCount').value) || 8;
+        for (let i = 0; i < sensorCount; i++) bytes.push(parseInt(document.getElementById(`sensor_${i}`).value) || 0);
+
+        const ampCount = parseInt(document.getElementById('ampCount').value) || 2;
+        for (let i = 0; i < ampCount; i++) bytes.push(parseInt(document.getElementById(`amp_${i}`).value) || 1);
+
+        const axleBoardCount = parseInt(document.getElementById('axleBoardCount').value) || 2;
+        for (let i = 0; i < axleBoardCount; i++) bytes.push(parseInt(document.getElementById(`axleboard_${i}`).value) || 1);
+
+        const outputBoardCount = parseInt(document.getElementById('outputBoardCount').value) || 2;
+        for (let i = 0; i < outputBoardCount; i++) bytes.push(parseInt(document.getElementById(`outputboard_${i}`).value) || 1);
+
+        const cabinetCount = parseInt(document.getElementById('cabinetCount').value) || 2;
+        for (let i = 0; i < cabinetCount; i++) bytes.push(parseInt(document.getElementById(`cabinet_${i}`).value) || 1);
+
+        bytes.push(parseInt(document.getElementById('alarm').value) || 2);
+        return bytes;
+    }
+
+    function generateFrame() {
+        const dataDomain = getDataDomain();
+        const frameHeader = 0xAA;
+        const frameType = 0x00;
+        const frameTail = 0xFF;
+
+        const totalLength = 1 + 2 + 1 + dataDomain.length + 2 + 1;
+
+        const frameWithoutCRC = [frameHeader, (totalLength >> 8) & 0xFF, totalLength & 0xFF, frameType, ...dataDomain];
+
+        const crc = crc16ccitt(frameWithoutCRC);
+        const crcHigh = (crc >> 8) & 0xFF;
+        const crcLow  = crc & 0xFF;
+
+        // === 修改点：CRC低字节在前（用户要求）===
+        const fullFrame = [...frameWithoutCRC, crcLow, crcHigh, frameTail];
+
+        let hexStr = fullFrame.map(b => byteToHex(b)).join(' ');
+
+        document.getElementById('result').innerHTML = `
+                <strong>完整状态帧（十六进制）：</strong><br>
+                <span class="hex">${hexStr}</span><br><br>
+                <strong>总长度：</strong>${totalLength} 字节<br>
+                <strong>CRC：</strong>0x${byteToHex(crcLow)}${byteToHex(crcHigh)} （低字节在前）
+            `;
+    }
+
+    function copyResult() {
+        const text = document.getElementById('result').innerText;
+        navigator.clipboard.writeText(text).then(() => alert('报文已复制！'));
+    }
+
+    function clearAll() {
+        if (confirm('确定清空所有配置吗？')) location.reload();
+    }
+
+    window.onload = function() {
+        generateTables();
+        const ids = ['axleCount','sensorCount','ampCount','axleBoardCount','outputBoardCount','cabinetCount'];
+        ids.forEach(id => {
+            document.getElementById(id).addEventListener('change', generateTables);
+        });
+    };
+</script>
+</body>
+</html>
