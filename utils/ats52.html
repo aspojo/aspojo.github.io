@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiView → BiMSM 事件报文解析器</title>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { text-align: center; color: #1a73e8; }
+        textarea {
+            width: 100%;
+            height: 120px;
+            font-family: Consolas, monospace;
+            font-size: 14px;
+        }
+        button {
+            margin: 10px 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        .result {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background: #f0f0f0;
+            width: 220px;
+        }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .hex-view {
+            background: #f8f8f8;
+            padding: 8px;
+            font-family: Consolas, monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>BiView → BiMSM 事件报文解析器</h1>
+    <p><strong>说明：</strong>支持大端序（Big-Endian）。可变字符串采用 <strong>2字节长度前缀 + 数据</strong>（常见格式），如需其他长度前缀请告知。</p>
+
+    <label>输入报文（十六进制，可带空格）：</label><br><br>
+    <textarea id="hexInput" placeholder="AA 00 5A 52 24 05 19 10 30 45 00 00 00 01 ..."></textarea>
+
+    <br>
+    <button onclick="parseMessage()">解析报文</button>
+    <button onclick="clearAll()">清空</button>
+
+    <div id="result" class="result" style="display:none;">
+        <table>
+            <tr><th>字段</th><th>值</th><th>说明</th></tr>
+            <tr><td>HEADER</td><td id="header"></td><td>帧开始标志</td></tr>
+            <tr><td>LEN</td><td id="len"></td><td>帧长度（从MSG_ID到CRC）</td></tr>
+            <tr><td>MSG_ID</td><td id="msgid"></td><td>消息ID</td></tr>
+            <tr><td>STAMP (北京时间)</td><td id="timestamp"></td><td>年-月-日 时:分:秒</td></tr>
+            <tr><td>SN</td><td id="sn"></td><td>序列号</td></tr>
+            <tr><td>EVENT_TYPE</td><td id="eventType"></td><td>事件类型</td></tr>
+            <tr><td>CTRL_AREA</td><td id="ctrlArea"></td><td>控制区域ID</td></tr>
+            <tr><td>DEV_NAME</td><td id="devName"></td><td>设备名称</td></tr>
+            <tr><td>PARAM1</td><td id="param1"></td><td>参数1</td></tr>
+            <tr><td>PARAM2</td><td id="param2"></td><td>参数2</td></tr>
+            <tr><td>PARAM3</td><td id="param3"></td><td>参数3</td></tr>
+            <tr><td>PARAM4</td><td id="param4"></td><td>参数4</td></tr>
+            <tr><td>PARAM5</td><td id="param5"></td><td>参数5</td></tr>
+            <tr><td>PARAM6</td><td id="param6"></td><td>参数6</td></tr>
+            <tr><td>RECOVERSTATUS</td><td id="recoverStatus"></td><td>报警恢复状态</td></tr>
+            <tr><td>DEV_ID</td><td id="devId"></td><td>设备ID</td></tr>
+            <tr><td>END</td><td id="end"></td><td>帧结束标志</td></tr>
+            <tr><td>CRC</td><td id="crc"></td><td>校验码（未验证）</td></tr>
+        </table>
+
+        <h3>原始报文（Hex）</h3>
+        <div id="rawHex" class="hex-view"></div>
+    </div>
+
+    <div id="error" style="color:red; margin-top:15px; display:none;"></div>
+</div>
+
+<script>
+    function hexToBytes(hex) {
+        hex = hex.replace(/\s+/g, '').toUpperCase();
+        if (hex.length % 2 !== 0) throw new Error("十六进制字符串长度必须为偶数");
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < hex.length; i += 2) {
+            bytes[i/2] = parseInt(hex.substr(i, 2), 16);
+        }
+        return bytes;
+    }
+
+    function bytesToString(bytes, offset, length) {
+        let str = '';
+        for (let i = 0; i < length; i++) {
+            const c = bytes[offset + i];
+            str += (c >= 32 && c <= 126) ? String.fromCharCode(c) : '.';
+        }
+        return str;
+    }
+
+    function parseMessage() {
+        const input = document.getElementById('hexInput').value.trim();
+        const errorDiv = document.getElementById('error');
+        const resultDiv = document.getElementById('result');
+
+        errorDiv.style.display = 'none';
+        resultDiv.style.display = 'none';
+
+        if (!input) {
+            errorDiv.textContent = "请输入报文数据";
+            errorDiv.style.display = 'block';
+            return;
+        }
+
+        try {
+            const bytes = hexToBytes(input);
+            let offset = 0;
+
+            // 1. HEADER
+            if (bytes.length < 1 || bytes[offset] !== 0xAA) {
+                throw new Error("HEADER 错误，应为 0xAA");
+            }
+            document.getElementById('header').innerHTML = `0xAA <span class="success">✓</span>`;
+            offset += 1;
+
+            // 2. LEN
+            if (offset + 2 > bytes.length) throw new Error("数据长度不足");
+            const len = (bytes[offset] << 8) | bytes[offset + 1];
+            document.getElementById('len').textContent = len + " (0x" + len.toString(16).toUpperCase().padStart(4, '0') + ")";
+            offset += 2;
+
+            // 检查总长度
+            const expectedTotal = 1 + 2 + len + 1; // HEADER + LEN + LEN内容 + END (CRC包含在LEN中)
+            if (bytes.length < expectedTotal) {
+                console.warn("实际长度与LEN不完全匹配");
+            }
+
+            // 3. MSG_ID
+            if (bytes[offset] !== 0x52) {
+                document.getElementById('msgid').innerHTML = `0x${bytes[offset].toString(16).toUpperCase().padStart(2,'0')} <span class="error">⚠</span>`;
+            } else {
+                document.getElementById('msgid').innerHTML = `0x52 <span class="success">✓</span>`;
+            }
+            offset += 1;
+
+            // 4. STAMP
+            if (offset + 6 > bytes.length) throw new Error("时间戳数据不足");
+            const year = 2000 + bytes[offset];
+            const month = bytes[offset+1];
+            const day = bytes[offset+2];
+            const hour = bytes[offset+3];
+            const min = bytes[offset+4];
+            const sec = bytes[offset+5];
+            const tsStr = `${year}-${month.toString().padStart(2,'0')}-${day.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+            document.getElementById('timestamp').textContent = tsStr;
+            offset += 6;
+
+            // 5. SN
+            const sn = (bytes[offset]<<24) | (bytes[offset+1]<<16) | (bytes[offset+2]<<8) | bytes[offset+3];
+            document.getElementById('sn').textContent = sn + " (0x" + sn.toString(16).toUpperCase().padStart(8,'0') + ")";
+            offset += 4;
+
+            // 6. EVENT_TYPE
+            const eventType = (bytes[offset]<<24) | (bytes[offset+1]<<16) | (bytes[offset+2]<<8) | bytes[offset+3];
+            document.getElementById('eventType').textContent = eventType + " (0x" + eventType.toString(16).toUpperCase().padStart(8,'0') + ")";
+            offset += 4;
+
+            // 7. CTRL_AREA
+            const ctrlArea = (bytes[offset]<<24) | (bytes[offset+1]<<16) | (bytes[offset+2]<<8) | bytes[offset+3];
+            document.getElementById('ctrlArea').textContent = ctrlArea + " (0x" + ctrlArea.toString(16).toUpperCase().padStart(8,'0') + ")";
+            offset += 4;
+
+            // 8~14. 可变字符串 (假设 2字节长度前缀)
+            const strings = ['devName','param1','param2','param3','param4','param5','param6'];
+            for (let i = 0; i < 7; i++) {
+                if (offset + 2 > bytes.length) throw new Error("字符串长度前缀不足");
+                const strLen = (bytes[offset] << 8) | bytes[offset + 1];
+                offset += 2;
+                if (offset + strLen > bytes.length) throw new Error(`字符串数据不足 (字段${i+8})`);
+                const str = new TextDecoder('utf-8').decode(bytes.subarray(offset, offset + strLen));
+                document.getElementById(strings[i]).textContent = str || '(空)';
+                offset += strLen;
+            }
+
+            // 15. RECOVERSTATUS
+            if (offset >= bytes.length) throw new Error("RECOVERSTATUS 位置不足");
+            const recover = bytes[offset];
+            let recoverText = recover;
+            if (recover === 0) recoverText += " (未恢复)";
+            else if (recover === 1) recoverText += " (已恢复)";
+            else if (recover === 2) recoverText += " (无需恢复)";
+            document.getElementById('recoverStatus').textContent = recoverText;
+            offset += 1;
+
+            // 16. DEV_ID
+            if (offset + 4 > bytes.length) throw new Error("DEV_ID 不足");
+            const devId = (bytes[offset]<<24) | (bytes[offset+1]<<16) | (bytes[offset+2]<<8) | bytes[offset+3];
+            document.getElementById('devId').textContent = devId + " (0x" + devId.toString(16).toUpperCase().padStart(8,'0') + ")";
+            offset += 4;
+
+            // 17. END
+            if (offset >= bytes.length || bytes[offset] !== 0x55) {
+                document.getElementById('end').innerHTML = `0x${bytes[offset]?.toString(16).toUpperCase().padStart(2,'0') || '??'} <span class="error">⚠</span>`;
+            } else {
+                document.getElementById('end').innerHTML = `0x55 <span class="success">✓</span>`;
+            }
+            offset += 1;
+
+            // 18. CRC
+            let crc = 0;
+            if (offset + 4 <= bytes.length) {
+                crc = (bytes[offset]<<24) | (bytes[offset+1]<<16) | (bytes[offset+2]<<8) | bytes[offset+3];
+            }
+            document.getElementById('crc').textContent = "0x" + crc.toString(16).toUpperCase().padStart(8,'0') + " (未校验)";
+
+            // 显示原始报文
+            document.getElementById('rawHex').textContent = input;
+
+            resultDiv.style.display = 'block';
+
+        } catch (e) {
+            errorDiv.textContent = "解析失败: " + e.message;
+            errorDiv.style.display = 'block';
+        }
+    }
+
+    function clearAll() {
+        document.getElementById('hexInput').value = '';
+        document.getElementById('result').style.display = 'none';
+        document.getElementById('error').style.display = 'none';
+    }
+</script>
+</body>
+</html>
