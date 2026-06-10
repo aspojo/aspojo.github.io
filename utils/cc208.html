@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCAM->BIIOM 报文解析工具</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px auto;
+            max-width: 900px;
+            color: #333;
+        }
+        h2 { border-bottom: 2px solid #0056b3; padding-bottom: 10px; color: #0056b3; }
+        .control-panel { margin-bottom: 20px; }
+        textarea {
+            width: 100%; height: 120px; padding: 10px;
+            font-family: monospace; font-size: 14px;
+            border: 1px solid #ccc; border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            margin-top: 10px; padding: 10px 20px;
+            background-color: #0056b3; color: white;
+            border: none; border-radius: 4px; cursor: pointer;
+            font-size: 16px; transition: 0.3s;
+        }
+        button:hover { background-color: #004494; }
+        table {
+            width: 100%; border-collapse: collapse; margin-top: 20px;
+            font-size: 14px;
+        }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f4f4f4; width: 25%; }
+        .section-title { background-color: #e9ecef; font-weight: bold; text-align: center; }
+        .error { color: #dc3545; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<h2>CCAM -> BIIOM 报文解析器</h2>
+
+<div class="control-panel">
+    <label for="hexInput"><strong>请输入十六进制报文 (用空格或连字符分隔均可):</strong></label><br>
+    <textarea id="hexInput" placeholder="例如: FF 00 1A 10 AA ..."></textarea><br>
+    <button onclick="parseHex()">开始解析</button>
+    <div id="errorMsg" class="error"></div>
+</div>
+
+<table id="resultTable" style="display: none;">
+    <thead>
+    <tr>
+        <th>字段名称</th>
+        <th>解析值 (Hex / Dec / 含义)</th>
+    </tr>
+    </thead>
+    <tbody id="resultBody">
+    </tbody>
+</table>
+
+<script>
+    // 将十六进制字符串转为 Uint8Array
+    function hexToBytes(hexString) {
+        const cleanHex = hexString.replace(/[^a-fA-F0-9]/g, '');
+        if (cleanHex.length % 2 !== 0) {
+            throw new Error("十六进制字符串长度必须为偶数！");
+        }
+        const bytes = new Uint8Array(cleanHex.length / 2);
+        for (let i = 0; i < cleanHex.length; i += 2) {
+            bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
+        }
+        return bytes;
+    }
+
+    // 格式化输出两位 Hex
+    function toHex(num, padding = 2) {
+        return "0x" + num.toString(16).toUpperCase().padStart(padding, '0');
+    }
+
+    // 向表格添加一行
+    function addRow(tbody, name, value, isSection = false) {
+        const tr = document.createElement('tr');
+        if (isSection) {
+            const td = document.createElement('td');
+            td.colSpan = 2;
+            td.className = 'section-title';
+            td.innerText = name;
+            tr.appendChild(td);
+        } else {
+            const tdName = document.createElement('td');
+            tdName.innerText = name;
+            const tdValue = document.createElement('td');
+            tdValue.innerText = value;
+            tr.appendChild(tdName);
+            tr.appendChild(tdValue);
+        }
+        tbody.appendChild(tr);
+    }
+
+    function parseHex() {
+        const hexStr = document.getElementById('hexInput').value;
+        const errorMsg = document.getElementById('errorMsg');
+        const resultTable = document.getElementById('resultTable');
+        const resultBody = document.getElementById('resultBody');
+
+        errorMsg.innerText = '';
+        resultBody.innerHTML = '';
+
+        if (!hexStr.trim()) {
+            errorMsg.innerText = "请输入报文内容。";
+            resultTable.style.display = "none";
+            return;
+        }
+
+        try {
+            const bytes = hexToBytes(hexStr);
+            const view = new DataView(bytes.buffer);
+            let offset = 0;
+
+            resultTable.style.display = "table";
+
+            // --- 1. 解析帧头 (Frame Header) ---
+            addRow(resultBody, "报文外层结构 (Header)", "", true);
+
+            const frameType = view.getUint8(offset); offset += 1;
+            addRow(resultBody, "1. FrameType (1B)", `${toHex(frameType)} (固定为 0xFF)`);
+
+            const msgLen = view.getUint16(offset, false); offset += 2; // false 代表 BigEndian
+            addRow(resultBody, "2. MsgLen (2B)", `${msgLen} (0x${msgLen.toString(16).toUpperCase()})`);
+
+            const srcId = view.getUint32(offset, false); offset += 4;
+            addRow(resultBody, "3. SrcId (4B)", toHex(srcId, 8));
+
+            const dstId = view.getUint32(offset, false); offset += 4;
+            addRow(resultBody, "4. DstId (4B)", toHex(dstId, 8));
+
+            const sn = view.getUint32(offset, false); offset += 4;
+            addRow(resultBody, "5. Sn (4B)", sn);
+
+            const msgNum = view.getUint8(offset); offset += 1;
+            addRow(resultBody, "6. MsgNum (1B)", msgNum);
+
+            // --- 2. 解析公共消息 (PubMsg) ---
+            if (msgNum > 0) {
+                addRow(resultBody, "公共消息 (PubMsg)", "", true);
+
+                const pubMsgId = view.getUint8(offset); offset += 1;
+                addRow(resultBody, "7. PubMsgId (1B)", `${pubMsgId} (固定 202 或 208)`);
+
+                const pubMsgLen = view.getUint16(offset, false); offset += 2;
+                addRow(resultBody, "8. PubMsgLen (2B)", pubMsgLen);
+
+                // 开始解析表3的内容 (此处提取部分关键字段作为示例)
+                const pubMsgOffsetStart = offset;
+
+                const p_MsgId = view.getUint8(offset); offset += 1;
+                addRow(resultBody, "PubMsg.MsgId (1B)", p_MsgId);
+
+                const p_VerNo = view.getUint16(offset, false); offset += 2;
+                addRow(resultBody, "PubMsg.VerNo (2B)", toHex(p_VerNo, 4));
+
+                // Time: 6 bytes (YY MM DD HH MM SS)
+                const y = view.getUint8(offset);
+                const mo = view.getUint8(offset+1);
+                const d = view.getUint8(offset+2);
+                const h = view.getUint8(offset+3);
+                const m = view.getUint8(offset+4);
+                const s = view.getUint8(offset+5);
+                offset += 6;
+                addRow(resultBody, "PubMsg.Time (6B)", `20${y.toString().padStart(2,'0')}-${mo.toString().padStart(2,'0')}-${d.toString().padStart(2,'0')} ${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`);
+
+                const p_DrvId = view.getUint16(offset, false); offset += 2;
+                addRow(resultBody, "PubMsg.DrvId (2B)", p_DrvId === 0 ? "0 (无效)" : p_DrvId);
+
+                const p_HDrvMode = view.getUint8(offset); offset += 1;
+                let hDrvStr = p_HDrvMode === 0 ? "NOM" : p_HDrvMode === 1 ? "RM" : p_HDrvMode === 6 ? "CAM" : p_HDrvMode;
+                addRow(resultBody, "PubMsg.HDrvMode (1B)", `${p_HDrvMode} (${hDrvStr})`);
+
+                const p_CtrlLevel = view.getUint8(offset); offset += 1;
+                let ctrlStr = p_CtrlLevel === 0 ? "DEF" : p_CtrlLevel === 1 ? "ILC" : p_CtrlLevel === 3 ? "ITC" : p_CtrlLevel === 4 ? "CTC" : p_CtrlLevel === 5 ? "UTO" : "Unknown";
+                addRow(resultBody, "PubMsg.CtrlLevel (1B)", `${p_CtrlLevel} (${ctrlStr})`);
+
+                const p_DrvMode = view.getUint8(offset); offset += 1;
+                addRow(resultBody, "PubMsg.DrvMode (1B)", p_DrvMode);
+
+                const p_Speed = view.getUint16(offset, false); offset += 2;
+                addRow(resultBody, "PubMsg.Speed (2B)", p_Speed === 0xFFFF ? "无效" : `${p_Speed} km/h`);
+
+                const p_EbSpeed = view.getUint16(offset, false); offset += 2;
+                addRow(resultBody, "PubMsg.EbSpeed (2B)", p_EbSpeed === 0xFFFF ? "无效" : `${p_EbSpeed} km/h`);
+
+                // AtpFault 4字节数组解析 (Bit Mask)
+                const atpFault1 = view.getUint8(offset);
+                const atpFault2 = view.getUint8(offset+1);
+                const atpFault3 = view.getUint8(offset+2);
+                const atpFault4 = view.getUint8(offset+3);
+                offset += 4;
+                addRow(resultBody, "PubMsg.AtpFault (4B)", `[${toHex(atpFault1)} ${toHex(atpFault2)} ${toHex(atpFault3)} ${toHex(atpFault4)}] (按位解析详见手册)`);
+
+                // 跳过剩余的 PubMsg 长度
+                const parsedPubMsgBytes = offset - pubMsgOffsetStart;
+                const remainingPubMsgBytes = pubMsgLen - parsedPubMsgBytes;
+                if (remainingPubMsgBytes > 0) {
+                    offset += remainingPubMsgBytes; // 步进指针到私有消息
+                    addRow(resultBody, "... 剩余 PubMsg 字段", `(跳过 ${remainingPubMsgBytes} 字节)`);
+                }
+            }
+
+            // --- 3. 解析私有消息 (PrvMsg) ---
+            // 注意：由于长度可能不足或缺少私有消息，需要进行长度检测
+            if (offset + 3 < bytes.length - 4) { // 减 4 是为 CRC 预留
+                addRow(resultBody, "私有消息 (PrvMsg)", "", true);
+                const prvMsgId = view.getUint8(offset); offset += 1;
+                addRow(resultBody, "10. PrvMsgId (1B)", `${prvMsgId} (203/206/209)`);
+
+                const prvMsgLen = view.getUint16(offset, false); offset += 2;
+                addRow(resultBody, "11. PrvMsgLen (2B)", prvMsgLen);
+
+                // 跳过私有消息具体内容，可参照PubMsg模式进行补充
+                offset += prvMsgLen;
+                addRow(resultBody, "12. PrvMsg 内容", `(跳过 ${prvMsgLen} 字节, 开发者可自行按表4补充字段解析)`);
+            }
+
+            // --- 4. 解析 CRC ---
+            if (offset + 4 <= bytes.length) {
+                addRow(resultBody, "校验 (CRC)", "", true);
+                const crc = view.getUint32(offset, false);
+                addRow(resultBody, "CRC (4B)", toHex(crc, 8) + " (CCITT CRC32)");
+            } else {
+                addRow(resultBody, "警告", "报文长度不足，未找到 CRC 字段或解析偏移越界。");
+            }
+
+        } catch (err) {
+            errorMsg.innerText = "解析失败: " + err.message;
+            console.error(err);
+        }
+    }
+</script>
+</body>
+</html>

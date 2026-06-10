@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CC 客户端列车详细状态监控 (上传版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.6/dist/protobuf.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .form-group label {
+            width: 150px;
+            font-weight: bold;
+        }
+        .form-group input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group input[type="file"] {
+            border: none;
+            padding: 0;
+        }
+        .actions {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: #3498db;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #disconnectBtn {
+            background-color: #e74c3c;
+        }
+        #disconnectBtn:hover {
+            background-color: #c0392b;
+        }
+        .status-panel {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .status-disconnected { background-color: #fde8e8; color: #e74c3c; }
+        .status-connected { background-color: #e1f5fe; color: #0288d1; }
+        .status-ready { background-color: #e8f5e9; color: #2e7d32; }
+        .log-container {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 13px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>CC_Agent 调试工具 (动态上传 Proto 版)</h2>
+
+    <div class="form-group" style="background: #fcfcfc; padding: 10px; border: 1px dashed #ccc; border-radius: 4px;">
+        <label for="protoFileInput">1. 上传 Proto 文件:</label>
+        <input type="file" id="protoFileInput" accept=".proto" onchange="handleProtoUpload(this)">
+    </div>
+
+    <br>
+
+    <div class="form-group">
+        <label for="wsUrl">2. WebSocket 地址:</label>
+        <input type="text" id="wsUrl" value="ws://127.0.0.1:8080/cc/ccDetail">
+    </div>
+    <div class="form-group">
+        <label for="deviceId">3. 列车设备ID (uint32):</label>
+        <input type="number" id="deviceId" value="1" min="1">
+    </div>
+
+    <div class="actions">
+        <button id="connectBtn" onclick="connectWS()" disabled>连接并发送请求</button>
+        <button id="disconnectBtn" onclick="disconnectWS()" disabled>断开连接</button>
+    </div>
+
+    <div id="statusText" class="status-panel status-disconnected">状态: 请先上传 .proto 配置文件</div>
+
+    <h3>响应报文 (ClientTrainDetailReply):</h3>
+    <div id="logOutput" class="log-container">等待配置并接收数据...</div>
+</div>
+
+<script>
+    let ws = null;
+    let rootProto = null;
+    let ClientTrainDetailReq = null;
+    let ClientTrainDetailReply = null;
+
+    // 处理用户上传的 Proto 文件
+    function handleProtoUpload(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const protoText = e.target.result;
+            try {
+                // 初始化一个全新的 Root 对象
+                rootProto = new protobuf.Root();
+
+                // 动态解析上传的 proto 文本内容
+                protobuf.parse(protoText, rootProto);
+
+                // 根据定义的 package 路径（MSS.CC）提取消息类型 [cite: 23, 24]
+                ClientTrainDetailReq = rootProto.lookupType("MSS.CC.ClientTrainDetailReq"); [cite: 23]
+                ClientTrainDetailReply = rootProto.lookupType("MSS.CC.ClientTrainDetailReply"); [cite: 24]
+
+                // 解析成功，允许用户点击连接
+                updateStatusUI("ready", "Proto 文件解析成功！可以开始连接 WebSocket。");
+                document.getElementById("connectBtn").disabled = false;
+                document.getElementById("logOutput").style.color = "#ecf0f1";
+                document.getElementById("logOutput").textContent = "Proto 结构加载完成。包含结构:\n- ClientTrainDetailReq\n- ClientTrainDetailReply"; [cite: 23, 24]
+            } catch (err) {
+                rootProto = null;
+                document.getElementById("connectBtn").disabled = true;
+                logError("Proto 解析失败，请检查文件语法格式:\n" + err.message);
+                updateStatusUI("disconnected", "Proto 解析失败");
+            }
+        };
+
+        // 读取为文本字符串
+        reader.readAsText(file);
+    }
+
+    // 统一更新状态栏样式
+    function updateStatusUI(type, text) {
+        const statusText = document.getElementById("statusText");
+        statusText.innerText = "状态: " + text;
+
+        if (type === "connected") {
+            statusText.className = "status-panel status-connected";
+            document.getElementById("connectBtn").disabled = true;
+            document.getElementById("disconnectBtn").disabled = false;
+        } else if (type === "ready") {
+            statusText.className = "status-panel status-ready";
+            document.getElementById("connectBtn").disabled = false;
+            document.getElementById("disconnectBtn").disabled = true;
+        } else {
+            statusText.className = "status-panel status-disconnected";
+            document.getElementById("connectBtn").disabled = (rootProto === null);
+            document.getElementById("disconnectBtn").disabled = true;
+        }
+    }
+
+    function logError(msg) {
+        const output = document.getElementById("logOutput");
+        output.style.color = "#ff7675";
+        output.textContent = msg;
+    }
+
+    function connectWS() {
+        if (!rootProto) {
+            alert("请先上传并解析 Proto 文件！");
+            return;
+        }
+
+        const url = document.getElementById("wsUrl").value;
+        const deviceId = parseInt(document.getElementById("deviceId").value);
+
+        if (isNaN(deviceId)) {
+            alert("请输入有效的列车设备ID");
+            return;
+        }
+
+        try {
+            ws = new WebSocket(url);
+            ws.binaryType = "arraybuffer"; // 设置二进制传输类型
+            updateStatusUI("connected", "正在连接到 " + url + " ...");
+        } catch (e) {
+            logError("WebSocket 初始化失败: " + e.message);
+            updateStatusUI("disconnected", "连接失败");
+            return;
+        }
+
+        ws.onopen = function() {
+            updateStatusUI("connected", "已连接，正在构建并发送 Protobuf 请求...");
+
+            // 1. 构建请求数据 [cite: 23]
+            const payload = { trainDeviceId: deviceId }; [cite: 23]
+
+            // 2. 验证有效性
+            const errMsg = ClientTrainDetailReq.verify(payload);
+            if (errMsg) {
+                logError("请求数据结构验证失败: " + errMsg);
+                return;
+            }
+
+            // 3. 序列化编码
+            const message = ClientTrainDetailReq.create(payload);
+            const buffer = ClientTrainDetailReq.encode(message).finish();
+
+            // 4. 发送二进制流
+            ws.send(buffer);
+            document.getElementById("logOutput").style.color = "#ecf0f1";
+            document.getElementById("logOutput").textContent = "已发送请求 (trainDeviceId: " + deviceId + ")，等待服务端响应...\n"; [cite: 23]
+        };
+
+        ws.onmessage = function(event) {
+            try {
+                if (event.data instanceof ArrayBuffer) {
+                    const Uint8ArrayData = new Uint8Array(event.data);
+
+                    // 1. 解码二进制数据
+                    const decodedMessage = ClientTrainDetailReply.decode(Uint8ArrayData); [cite: 24]
+
+                    // 2. 转换为标准 JS 对象
+                    const plainObject = ClientTrainDetailReply.toObject(decodedMessage, { [cite: 24]
+                    longs: String,   // uint64 转字符串防精度丢失
+                        enums: String,   // 枚举转为对应名称字符串
+                        bytes: String,   // bytes 属性转为 Base64
+                        defaults: true,  // 展示默认值
+                        arrays: true,    // 强制输出空数组 []
+                        objects: true    // 强制输出空对象 {}
+                });
+
+                    // 3. 格式化输出
+                    document.getElementById("logOutput").style.color = "#2ecc71";
+                    document.getElementById("logOutput").textContent = JSON.stringify(plainObject, null, 4);
+                } else {
+                    logError("接收到非二进制(ArrayBuffer)格式的数据，无法解析！");
+                }
+            } catch (err) {
+                logError("Protobuf 解码响应报文失败:\n" + err.stack);
+            }
+        };
+
+        ws.onerror = function(event) {
+            logError("WebSocket 发生错误，请检查服务端网关状态或地址。");
+            updateStatusUI("disconnected", "连接错误");
+        };
+
+        ws.onclose = function(event) {
+            updateStatusUI("disconnected", "连接已断开 (Code: " + event.code + ")");
+        };
+    }
+
+    function disconnectWS() {
+        if (ws) {
+            ws.close();
+        }
+    }
+</script>
+</body>
+</html>

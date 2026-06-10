@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CCAM-BIIOM 报文自动生成与校验工具</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        header {
+            margin-bottom: 25px;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 15px;
+        }
+        h1 {
+            color: #1e3a8a;
+            margin: 0 0 10px 0;
+            font-size: 26px;
+        }
+        .subtitle {
+            color: #6b7280;
+            margin: 0;
+            font-size: 14px;
+        }
+        .alert {
+            background-color: #fee2e2;
+            border-left: 4px solid #ef4444;
+            color: #991b1b;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .grid {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            margin-bottom: 20px;
+        }
+        .grid-row {
+            display: table-row;
+        }
+        .grid-cell {
+            display: table-cell;
+            padding: 10px;
+            vertical-align: top;
+        }
+        .card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #1e293b;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-left: 4px solid #3b82f6;
+            padding-left: 8px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #4b5563;
+            font-size: 14px;
+        }
+        input[type="text"], select, input[type="number"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            background-color: #fff;
+        }
+        textarea {
+            resize: vertical;
+            height: 80px;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .btn {
+            background-color: #2563eb;
+            color: #fff;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #1d4ed8;
+        }
+        .output-container {
+            margin-top: 25px;
+        }
+        .legend {
+            margin-bottom: 10px;
+            font-size: 13px;
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin-right: 15px;
+            font-weight: 600;
+        }
+        .color-frame { color: #ef4444; }
+        .color-len { color: #f59e0b; }
+        .color-src { color: #3b82f6; }
+        .color-msgid { color: #8b5cf6; }
+        .color-payload { color: #06b6d4; }
+        .color-padding { color: #94a3b8; }
+        .color-crc { color: #10b981; }
+
+        .output-box {
+            background-color: #0f172a;
+            color: #38bdf8;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Courier New', Courier, monospace;
+            word-break: break-all;
+            font-size: 16px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            border: 1px solid #334155;
+        }
+        .output-box span {
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        .bg-frame { background-color: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+        .bg-len { background-color: rgba(245, 158, 11, 0.2); color: #fde047; }
+        .bg-src { background-color: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+        .bg-msgid { background-color: rgba(139, 92, 246, 0.2); color: #c084fc; }
+        .bg-payload { background-color: rgba(6, 182, 212, 0.2); color: #67e8f9; }
+        .bg-padding { background-color: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
+        .bg-crc { background-color: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 13px;
+        }
+        .stats-table th, .stats-table td {
+            border: 1px solid #cbd5e1;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        .stats-table th {
+            background-color: #e2e8f0;
+            color: #334155;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>CCAM ➔ BIIOM 报文自动生成与校验工具</h1>
+        <p class="subtitle">专门解决接收端提示 “data len is less than min request” 的自动化调测辅助工具</p>
+    </header>
+
+    <div class="alert">
+        <strong>错误场景诊断：</strong>
+        当 MSSAGENT 日志提示 <code>data len[185] is less than min request[301]</code> 时，说明您发送的报文总长度（185字节）未达到网关预期的最小边界值（301字节）。本工具支持一键对私有消息体进行自动填零（Padding）补齐，并精确重算全局大端 MsgLen 与 CCITT CRC32。
+    </div>
+
+    <div class="card">
+        <div class="card-title">报文基础参数配置</div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="srcId">发送方标识 (SrcId) - 4字节 HEX</label>
+                <input type="text" id="srcId" value="10 AA 00 00" placeholder="例如: 10 AA 00 00">
+            </div>
+
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="msgId">私有消息ID (MsgId) - 十进制</label>
+                <input type="number" id="msgId" value="209" placeholder="例如: 209">
+            </div>
+
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="minLen">目标最小总长度 (字节)</label>
+                <input type="number" id="minLen" value="301" min="20">
+            </div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px;">
+            <div class="form-group" style="flex: 1; min-width: 300px;">
+                <label for="crcType">CRC32 校验模式算法选择</label>
+                <select id="crcType">
+                    <option value="mpeg2">CCITT CRC32 / MPEG-2 (MSB-first / 非翻转) - 多数嵌入式系统常用</option>
+                    <option value="reflected">Standard CRC32 (LSB-first / 翻转) - 以太网/ZIP常用</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">消息体载荷数据 (Payload Hex)</div>
+        <div class="form-group">
+            <label for="payload">当前公共消息体+私有消息体已有字段 (HEX 字符串，空格会自动忽略)：</label>
+            <textarea id="payload" placeholder="请输入已有的报文体十六进制串...">01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F 20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F 30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 3F 40</textarea>
+            <p style="font-size: 12px; color: #64748b; margin-top: 5px;">提示：若当前已有字段总长度不足目标长度，工具将自动在其后、CRC之前补齐 <code>0x00</code>。</p>
+        </div>
+
+        <button class="btn" onclick="processPacket()">⚡ 自动补齐并生成符合标准的报文</button>
+    </div>
+
+    <div class="output-container" id="resultArea" style="display:none;">
+        <div class="card-title">高亮可视化输出报文 (HEX String)</div>
+
+        <div class="legend">
+            布局图例：
+            <span class="legend-item color-frame">■ FrameType</span>
+            <span class="legend-item color-len">■ MsgLen</span>
+            <span class="legend-item color-src">■ SrcId</span>
+            <span class="legend-item color-msgid">■ MsgId</span>
+            <span class="legend-item color-payload">■ 原始Payload</span>
+            <span class="legend-item color-padding">■ 自动Padding垫片</span>
+            <span class="legend-item color-crc">■ 最终CRC32</span>
+        </div>
+
+        <div class="output-box" id="hexOutput"></div>
+
+        <div class="card" style="margin-top: 20px; background-color: #fff;">
+            <div class="card-title">报文精细统计及边界验证</div>
+            <table class="stats-table">
+                <thead>
+                <tr>
+                    <th>字段部分</th>
+                    <th>所占大小 (Bytes)</th>
+                    <th>描述及大端解析值</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><b>整帧总长度 (Total Frame Len)</b></td>
+                    <td><span id="statTotalLen" style="font-weight:bold; color:#1e3a8a;">-</span> 字节</td>
+                    <td><span id="statStatus">-</span></td>
+                </tr>
+                <tr>
+                    <td><b>MsgLen 字段计算值</b></td>
+                    <td>2 字节</td>
+                    <td>解析为十进制: <span id="statMsgLenDec" style="font-family:monospace; font-weight:bold;">-</span> (不含FrameType和MsgLen自身)</td>
+                </tr>
+                <tr>
+                    <td><b>自动补齐填充 (Padding)</b></td>
+                    <td><span id="statPaddingLen">-</span> 字节</td>
+                    <td>使用 <code>0x00</code> 进行安全尾部空间对齐</td>
+                </tr>
+                <tr>
+                    <td><b>计算所得 CRC32 结果</b></td>
+                    <td>4 字节</td>
+                    <td>多项式 0x04C11DB7，初始值 0xFFFFFFFF：<span id="statCrcVal" style="font-family:monospace; font-weight:bold; color:#10b981;">-</span></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 预生成标准非翻转 CRC32 (MPEG-2) 表
+    function crc32_mpeg2(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) {
+            crc ^= (bytes[i] << 24);
+            for (let j = 0; j < 8; j++) {
+                if (crc & 0x80000000) {
+                    crc = (crc << 1) ^ 0x04C11DB7;
+                } else {
+                    crc = (crc << 1);
+                }
+            }
+        }
+        return (crc >>> 0);
+    }
+
+    // 预生成标准翻转 CRC32 表
+    let crc32_reflected_table = [];
+    (function() {
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let j = 0; j < 8; j++) {
+                c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+            }
+            crc32_reflected_table[i] = c;
+        }
+    })();
+
+    function crc32_reflected(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) {
+            crc = (crc >>> 8) ^ crc32_reflected_table[(crc ^ bytes[i]) & 0xFF];
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function hexStringToByteArray(hexString) {
+        hexString = hexString.replace(/\s+/g, '');
+        if (hexString.length % 2 !== 0) hexString = '0' + hexString;
+        let bytes = [];
+        for (let i = 0; i < hexString.length; i += 2) {
+            bytes.push(parseInt(hexString.substr(i, 2), 16));
+        }
+        return bytes;
+    }
+
+    function byteToHex(b) {
+        return b.toString(16).padStart(2, '0').toUpperCase();
+    }
+
+    function processPacket() {
+        let srcIdStr = document.getElementById("srcId").value;
+        let msgIdVal = parseInt(document.getElementById("msgId").value);
+        let minTotalLen = parseInt(document.getElementById("minLen").value) || 301;
+        let payloadStr = document.getElementById("payload").value;
+        let crcType = document.getElementById("crcType").value;
+
+        let srcIdBytes = hexStringToByteArray(srcIdStr);
+        let payloadBytes = hexStringToByteArray(payloadStr);
+
+        // 基础固定元素
+        let frameTypeByte = 0xFF;
+
+        // 构建 MsgId 2字节 (大端)
+        let msgIdBytes = [(msgIdVal >> 8) & 0xFF, msgIdVal & 0xFF];
+
+        // 目前已有的物理总长度 (不含 MsgLen 2字节和 CRC 4字节吗？不，我们算整帧结构)
+        // 基础帧头: FrameType(1) + MsgLen(2) + SrcId(4) + MsgId(2)
+        // 物理结构: [FrameType] [MsgLen] [SrcId] [MsgId] [Payload...] [Padding...] [CRC]
+
+        let currentBytesWithoutLenAndCrc = [];
+        currentBytesWithoutLenAndCrc.push(...srcIdBytes);
+        currentBytesWithoutLenAndCrc.push(...msgIdBytes);
+        currentBytesWithoutLenAndCrc.push(...payloadBytes);
+
+        // 算上固定开销：FrameType(1) + MsgLen(2) + CRC(4) = 7字节
+        let requiredPadding = minTotalLen - (7 + currentBytesWithoutLenAndCrc.length);
+        if (requiredPadding < 0) requiredPadding = 0;
+
+        let paddingBytes = [];
+        for (let i = 0; i < requiredPadding; i++) {
+            paddingBytes.push(0x00);
+        }
+
+        // 计算 MsgLen 核心值 (从 SrcId 开始到 CRC 结束)
+        // 包含部分: SrcId + MsgId + Payload + Padding + CRC(4字节)
+        let msgLenValue = srcIdBytes.length + msgIdBytes.length + payloadBytes.length + paddingBytes.length + 4;
+        let msgLenBytes = [(msgLenValue >> 8) & 0xFF, msgLenValue & 0xFF];
+
+        // 拼装完整待计算校验的缓冲区
+        let fullFrameBytesExceptCrc = [];
+        fullFrameBytesExceptCrc.push(frameTypeByte);
+        fullFrameBytesExceptCrc.push(...msgLenBytes);
+        fullFrameBytesExceptCrc.push(...srcIdBytes);
+        fullFrameBytesExceptCrc.push(...msgIdBytes);
+        fullFrameBytesExceptCrc.push(...payloadBytes);
+        fullFrameBytesExceptCrc.push(...paddingBytes);
+
+        // 计算 CRC32
+        let crcResult = 0;
+        if (crcType === "reflected") {
+            crcResult = crc32_reflected(fullFrameBytesExceptCrc);
+        } else {
+            crcResult = crc32_mpeg2(fullFrameBytesExceptCrc);
+        }
+
+        let crcBytes = [
+            (crcResult >> 24) & 0xFF,
+            (crcResult >> 16) & 0xFF,
+            (crcResult >> 8) & 0xFF,
+            crcResult & 0xFF
+        ];
+
+        // 开始渲染高亮可视化输出
+        let htmlResult = "";
+        htmlResult += `<span class="bg-frame" title="FrameType (固定0xFF)">${byteToHex(frameTypeByte)}</span> `;
+        htmlResult += `<span class="bg-len" title="MsgLen (高低字节大端)">${byteToHex(msgLenBytes[0])} ${byteToHex(msgLenBytes[1])}</span> `;
+
+        let srcHex = srcIdBytes.map(byteToHex).join(" ");
+        htmlResult += `<span class="bg-src" title="SrcId (厂家及列车号)">${srcHex}</span> `;
+
+        let msgIdHex = msgIdBytes.map(byteToHex).join(" ");
+        htmlResult += `<span class="bg-msgid" title="MsgId">&#8203;${msgIdHex}</span> `;
+
+        if(payloadBytes.length > 0) {
+            let payloadHex = payloadBytes.map(byteToHex).join(" ");
+            htmlResult += `<span class="bg-payload" title="原始消息数据体">${payloadHex}</span> `;
+        }
+
+        if(paddingBytes.length > 0) {
+            let paddingHex = paddingBytes.map(byteToHex).join(" ");
+            htmlResult += `<span class="bg-padding" title="自动对齐填充字段">${paddingHex}</span> `;
+        }
+
+        let crcHex = crcBytes.map(byteToHex).join(" ");
+        htmlResult += `<span class="bg-crc" title="4字节全局校验和">${crcHex}</span>`;
+
+        // 更新到页面
+        document.getElementById("hexOutput").innerHTML = htmlResult;
+
+        let totalActualLen = fullFrameBytesExceptCrc.length + 4;
+        document.getElementById("statTotalLen").innerText = totalActualLen;
+        document.getElementById("statMsgLenDec").innerText = msgLenValue;
+        document.getElementById("statPaddingLen").innerText = paddingBytes.length;
+        document.getElementById("statCrcVal").innerText = "0x" + crcResult.toString(16).toUpperCase().padStart(8, '0');
+
+        if (totalActualLen >= minTotalLen) {
+            document.getElementById("statStatus").innerHTML = `<span style="color:#16a34a; font-weight:bold;">符合要求 (≥ ${minTotalLen} B)</span>`;
+        } else {
+            document.getElementById("statStatus").innerHTML = `<span style="color:#dc2626; font-weight:bold;">不符合要求</span>`;
+        }
+
+        document.getElementById("resultArea").style.display = "block";
+    }
+</script>
+</body>
+</html>

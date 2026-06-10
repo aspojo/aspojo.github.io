@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiView => BiMSS 报文解析器 (0x82)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .container { display: flex; gap: 20px; }
+        .input-section, .output-section { flex: 1; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 200px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: monospace; }
+        button { background-color: #3498db; color: white; border: none; padding: 10px 20px; margin-top: 15px; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background 0.3s; }
+        button:hover { background-color: #2980b9; }
+        pre { background-color: #272822; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; height: 600px; font-size: 14px; }
+        .error { color: #e74c3c; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<h2>BiView => BiMSS 列车跟踪信息报文 (0x82) 解析工具</h2>
+
+<div class="container">
+    <div class="input-section">
+        <h3>输入十六进制报文</h3>
+        <p>请粘贴以空格分隔的十六进制报文（如示例数据）：</p>
+        <textarea id="hexInput">aa 09 0e 82 1a 05 1f 09 01 3b 00 29 e6 87 00 29 00 12 00 12 00 00 03 97 00 00 00 00 d0 00 00 00 04 00 00 00 00 00 09 00 03 36 30 30 01 01 00 02 01 09 26 c0 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff ff ff ff ff 00 02 09 26 c1 00 01 fb f8 02 09 26 c1 00 01 fb f8 02 09 26 c1 00 00 13 b0 00 00 00 01 02 09 26 c1 02 01 05 00 ff 00 01 01 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 98 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 3e 00 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 3e 01 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 99 00 00 00 00 ce 00 00 00 05 00 00 00 00 00 09 00 03 34 30 30 01 01 00 01 01 09 11 40 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff ff ff ff ff 00 02 09 11 41 00 00 36 ec 02 09 11 41 00 00 36 ec 02 09 11 41 00 02 17 00 00 00 00 01 02 09 11 41 01 01 05 00 ff 00 01 01 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 9a 00 00 00 00 cb 00 00 00 05 00 00 00 00 00 09 00 03 34 30 30 01 01 00 01 01 09 2b 00 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff ff ff ff ff 00 02 09 2b 01 00 00 2c 06 02 09 2b 01 00 00 2c 06 02 09 2b 01 00 02 07 60 00 00 00 01 02 09 2b 01 01 01 05 00 ff 00 01 01 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 9b 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 49 80 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 49 81 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 9c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 47 00 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 47 01 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 9d 00 00 00 00 d5 00 00 00 04 00 00 00 00 00 09 00 03 36 30 30 01 01 00 02 01 09 0e 80 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff ff ff ff ff 00 02 09 0e 81 00 01 e2 ee 02 09 0e 81 00 01 e2 ee 02 09 11 81 00 02 1a d4 00 00 00 02 02 09 0e 81 02 09 11 81 02 01 05 00 ff 00 01 01 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 9e 00 00 00 00 d8 00 00 00 03 00 00 00 00 00 09 00 03 34 30 30 01 01 00 01 01 09 0d 00 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff ff ff ff ff 00 02 09 0d 01 00 00 24 cc 02 09 0d 01 00 00 24 cc 02 09 0d 01 00 02 01 8e 00 00 00 01 02 09 0d 01 01 01 05 00 ff 00 01 01 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 9f 00 00 00 00 d6 00 00 00 04 00 00 00 00 00 09 00 03 36 30 30 01 01 00 02 01 09 0d 40 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff 00 00 00 00 02 02 09 0d 41 00 01 fc ac 02 09 0d 41 00 01 fc ac 02 09 0d 41 00 00 1f fe 00 00 00 01 02 09 0d 41 02 01 05 00 ff 01 01 00 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 47 80 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 47 81 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a1 00 00 00 02 27 00 00 00 00 00 00 00 00 00 00 00 00 01 01 00 02 01 09 09 c0 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff 00 00 00 00 01 02 09 09 c1 00 02 20 ec 02 09 09 c1 00 02 20 ec 02 09 09 c1 00 00 40 74 00 00 00 01 02 09 09 c1 ff 01 04 01 ff 00 01 00 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a2 00 00 00 00 d2 00 00 00 04 00 00 00 00 00 09 00 03 36 30 30 01 01 00 02 01 09 1e 40 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff ff ff ff ff 00 02 09 1e 41 00 02 0b 66 02 09 1e 41 00 02 0b 66 02 09 1e 41 00 00 2f e4 00 00 00 01 02 09 1e 41 02 01 05 00 ff 00 01 01 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a3 00 00 00 00 d3 00 00 00 04 00 00 00 00 00 09 00 03 36 30 30 01 01 00 02 01 09 1a 80 00 00 00 01 00 00 00 01 ff 00 02 02 00 00 00 00 00 00 ff ff ff ff 00 00 00 00 02 02 09 1a 81 00 01 f0 54 02 09 1a 81 00 01 f0 54 02 09 1a 81 00 00 14 0a 00 00 00 01 02 09 1a 81 02 01 05 00 ff 01 01 00 ff ff ff ff ff 00 00 00 00 01 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 42 40 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 42 41 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 41 40 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 41 41 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 40 c0 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 40 c1 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 44 40 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 44 41 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 a8 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 01 09 3d 40 00 00 00 01 00 00 00 00 00 00 01 00 00 00 ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 01 02 09 3d 41 ff ff 0f ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 02 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 55 8f 8a 83 54</textarea>
+        <button onclick="parseHex()">开始解析</button>
+        <div id="errorMsg" class="error"></div>
+    </div>
+    <div class="output-section">
+        <h3>解析结果 JSON</h3>
+        <pre><code id="outputArea">等待解析...</code></pre>
+    </div>
+</div>
+
+<script>
+    const formatUnknown = (val) => val === 0xFFFFFFFF ? "未知(0xFFFFFFFF)" : val;
+
+    // 字典映射
+    const ccModeMap = {
+        15: "NOM (空模式)", 14: "ATB", 13: "ATB_CAM", 12: "ATB_FAM",
+        9: "CAM", 8: "FAM", 7: "AM-E", 6: "CM-E", 5: "AM-C",
+        4: "CM-C", 3: "AM-I", 2: "CM-I", 1: "RM", 0: "EUM", 33: "CM-TD"
+    };
+    const ctrlLevelMap = { 1: "CBTC", 2: "点式", 3: "联锁", 4: "增强点式", 17: "CM-TD" };
+    const vehicleTypeMap = {0: "未知", 1: "运营列车", 2: "临客", 3: "调试", 4: "回空", 5: "救援", 6: "工程车"};
+    const dirMap = {0: "未知", 1: "向左(上行)", 2: "向右(下行)"};
+
+    function parseHex() {
+        const hexStr = document.getElementById('hexInput').value.replace(/\s+/g, '');
+        const errorMsg = document.getElementById('errorMsg');
+        const outputArea = document.getElementById('outputArea');
+        errorMsg.innerText = "";
+
+        if (hexStr.length % 2 !== 0) {
+            errorMsg.innerText = "十六进制字符串长度无效（应为偶数）。";
+            return;
+        }
+
+        try {
+            const bytes = new Uint8Array(hexStr.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            const view = new DataView(bytes.buffer);
+            let offset = 0;
+
+            const readU8 = () => { const v = view.getUint8(offset); offset += 1; return v; };
+            const readU16 = () => { const v = view.getUint16(offset, false); offset += 2; return v; };
+            const readU32 = () => { const v = view.getUint32(offset, false); offset += 4; return v; };
+            const readStr = (len) => {
+                let str = "";
+                for(let i=0; i<len; i++) str += String.fromCharCode(readU8());
+                return str;
+            };
+
+            // 检查起始符
+            const header = readU8();
+            if (header !== 0xAA) throw new Error("帧开始标志错误，期望 0xAA，找到: " + header.toString(16));
+
+            const length = readU16();
+            const msgId = readU8();
+
+            // 时间戳
+            const stamp = `20${readU8().toString().padStart(2,'0')}-${readU8().toString().padStart(2,'0')}-${readU8().toString().padStart(2,'0')} ${readU8().toString().padStart(2,'0')}:${readU8().toString().padStart(2,'0')}:${readU8().toString().padStart(2,'0')}`;
+
+            const sn = readU32();
+            const vehCnt = readU16();
+            const vehIndexOfCurrent = readU16();
+            const vehCntOfCurrent = readU16();
+
+            const parsedData = {
+                "帧首": "0x" + header.toString(16).toUpperCase(),
+                "长度": length,
+                "消息ID": "0x" + msgId.toString(16).toUpperCase() + (msgId === 0x82 ? " (列车跟踪)" : ""),
+                "时间戳": stamp,
+                "流水号": sn,
+                "系统总列车数": vehCnt,
+                "当前报文列车索引": vehIndexOfCurrent,
+                "当前报文包含列车数": vehCntOfCurrent,
+                "列车列表": []
+            };
+
+            // 解析每一列车
+            for (let i = 0; i < vehCntOfCurrent; i++) {
+                const train = {};
+                train.Pvid = formatUnknown(readU32());
+                train.InfoSrc = "0x" + readU8().toString(16).toUpperCase();
+                train.TID = formatUnknown(readU32());
+                train.TripID = formatUnknown(readU32());
+                train.DID = formatUnknown(readU32());
+
+                train.LineNoOfDestCode = readU16();
+                const destCodeLen = readU16(); // 推断: N String由2字节长度前置
+                train.DestinationCode = readStr(destCodeLen);
+
+                train.VehicleType = vehicleTypeMap[readU8()] || "未知";
+                train.CbiCommunication = readU8() === 1 ? "正常" : "断开";
+                train.Flag = readU8() === 1 ? "标记" : "未标记";
+                train.Direction = dirMap[readU8()] || "未知";
+                train.TrackID = formatUnknown(readU32());
+                train.VehNumOfCurTrack = readU32();
+                train.ComVehNumOfCurTrack = readU32();
+
+                const nonComOrder = readU8();
+                train.NonComOrder = nonComOrder === 0xFF ? "0xFF(通信车)" : nonComOrder;
+                train.TrackIndex = readU8();
+
+                const traceStatusMap = {0:"未跟踪", 1:"非通信跟踪", 2:"通信跟踪", 3:"列车丢失"};
+                train.TraceStatus = traceStatusMap[readU8()] || "未知";
+
+                const serviceStatusMap = {0:"未知", 1:"提前添加", 2:"投入运营", 3:"退出运营"};
+                train.ServiceStatus = serviceStatusMap[readU8()] || "未知";
+
+                // 段场转线目的地码
+                const depotDestCodeNum = readU16();
+                train.DepotDestCodes = [];
+                for(let d=0; d<depotDestCodeNum; d++) {
+                    const lNo = readU16();
+                    const len = readU16();
+                    train.DepotDestCodes.push({ LineNo: lNo, Code: readStr(len) });
+                }
+
+                train.DriverID = formatUnknown(readU32());
+                train.TrainLength_mm = formatUnknown(readU32());
+                train.Speed_mms = formatUnknown(readU32());
+
+                const stopFlagMap = {0:"未停稳", 1:"停稳", 2:"停稳且停准", 0xFF:"未知"};
+                train.StopFlag = stopFlagMap[readU8()] || "未知";
+
+                train.OccupyHeadSegID = formatUnknown(readU32());
+                train.OccupyHeadSegOffset = formatUnknown(readU32());
+                train.HeadSegID = formatUnknown(readU32());
+                train.HeadSegOffset = formatUnknown(readU32());
+                train.TailSegID = formatUnknown(readU32());
+                train.TailSegOffset = formatUnknown(readU32());
+
+                const segCnt = readU32();
+                train.SegIDs = [];
+                for(let s=0; s<segCnt; s++) train.SegIDs.push(formatUnknown(readU32()));
+
+                const activeCCMap = {0:"未激活", 1:"1端", 2:"2端", 0xFF:"未知"};
+                train.ActiveCCID = activeCCMap[readU8()] || "未知";
+                train.ControlLevel = ctrlLevelMap[readU8()] || "未知";
+                train.CcMode = ccModeMap[readU8()] || "未知";
+
+                const ebState = readU8(); train.EB = ebState === 0xFF ? "未知" : (ebState === 1 ? "已EB" : "未EB");
+                train.EB_Reason = "0x" + readU8().toString(16).toUpperCase();
+                const fsbState = readU8(); train.FSB = fsbState === 0xFF ? "未知" : (fsbState === 1 ? "已FSB" : "未FSB");
+
+                const tdMap = {0:"旁路/未关闭", 1:"正常/关闭", 0xFF:"未知"};
+                train.Driver_td_not_bypassed = tdMap[readU8()] || "未知";
+                train.Td_closed = tdMap[readU8()] || "未知";
+                train.DoorEnable_Bypass = tdMap[readU8()] || "未知";
+
+                train.V_EOA_SecId = formatUnknown(readU32());
+                train.V_EOA_Offset = formatUnknown(readU32());
+
+                const integrityMap = {0:"不完整", 1:"完整", 0xFF:"未知"};
+                train.TrainIntegrity = integrityMap[readU8()] || "未知";
+
+                const linkNum = readU8();
+                train.CCExLinkStatuses = [];
+                const linkStateMap = {0xAA:"完全健康", 0x5A:"部分正常", 0x55:"完全故障", 0xFF:"未知(默认)"};
+                for(let l=0; l<linkNum; l++) {
+                    const lState = readU8();
+                    train.CCExLinkStatuses.push(linkStateMap[lState] || ("0x" + lState.toString(16).toUpperCase()));
+                }
+
+                // 保留字段 17 字节
+                offset += 17;
+
+                parsedData.列车列表.push(train);
+            }
+
+            parsedData["帧尾"] = "0x" + readU8().toString(16).toUpperCase();
+            parsedData["CRC"] = "0x" + readU32().toString(16).toUpperCase();
+
+            outputArea.innerHTML = JSON.stringify(parsedData, null, 2);
+
+        } catch (err) {
+            errorMsg.innerText = "解析时发生错误: " + err.message + "\n可能是报文格式不符合约定结构。";
+        }
+    }
+</script>
+</body>
+</html>
