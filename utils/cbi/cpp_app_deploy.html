@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cpp_app Docker部署说明</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 1000px; margin: 40px auto; line-height: 1.7; padding: 0 20px; }
+h1,h2 { color: #333; }
+pre { background:#f4f4f4; padding:12px; border-radius:6px; overflow:auto; }
+code { font-family: Consolas, monospace; }
+.section { margin-bottom: 30px; }
+</style>
+</head>
+<body>
+<h1>cpp_app Docker部署说明</h1>
+
+<div class="section">
+<h2>1. 导入镜像到本地仓库</h2>
+<p>镜像文件名：</p>
+<pre><code>cpp_app.tar</code></pre>
+
+<p>执行导入命令：</p>
+<pre><code>docker load -i cpp_app.tar</code></pre>
+
+<p>查看导入后的镜像：</p>
+<pre><code>docker images</code></pre>
+</div>
+
+<div class="section">
+<h2>2. 修改镜像名称</h2>
+<p>将镜像重命名为：</p>
+<pre><code>cpp_app:3.3.28</code></pre>
+
+<p>执行命令：</p>
+<pre><code>docker tag 741384f55e7d cpp_app:3.3.28</code></pre>
+
+<p>验证：</p>
+<pre><code>docker images</code></pre>
+</div>
+
+<div class="section">
+<h2>3. 使用 docker-compose 启动容器</h2>
+
+<p>创建 docker-compose.yml：</p>
+
+<pre><code>version: '3.8'
+
+services:
+  cbi_agent:
+    image: cpp_app:3.3.28
+    container_name: cbi_agent
+
+    command:
+      - cbi_agent
+
+    volumes:
+      - /var/local/bimss/conf/wxz:/opt/mss/conf
+      - /var/local/bimss/logs/wxz:/opt/mss/log
+
+    stdin_open: true
+    tty: true
+</code></pre>
+
+<p>启动容器：</p>
+<pre><code>docker compose up -d --force-recreate</code></pre>
+
+<p>查看容器状态：</p>
+<pre><code>docker ps</code></pre>
+
+<p>查看容器日志：</p>
+<pre><code>docker logs -f cbi_agent</code></pre>
+
+<p>停止容器：</p>
+<pre><code>docker compose down</code></pre>
+</div>
+
+</body>
+</html>
