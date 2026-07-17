@@ -2,283 +2,234 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>ATS TrainTrackPacket Parser</title>
+    <title>ATS TrainTrack Compact Parser</title>
     <style>
-        body {
-            font-family: Consolas, monospace;
-            margin: 20px
+        body{
+            font-family:Consolas,"Microsoft YaHei",monospace;
+            margin:10px;
+            font-size:13px;
         }
-
-        textarea {
-            width: 100%;
-            height: 220px
+        textarea{
+            width:100%;
+            height:120px;
+            font-size:12px;
         }
-
-        button, select {
-            font-size: 16px;
-            padding: 6px
+        button,select{
+            font-size:14px;
+            padding:3px 10px;
         }
-
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-top: 10px
+        table{
+            border-collapse:collapse;
+            width:100%;
+            margin:3px 0;
         }
-
-        td, th {
-            border: 1px solid #999;
-            padding: 5px
+        td,th{
+            border:1px solid #aaa;
+            padding:2px 5px;
+            line-height:16px;
         }
-
-        th {
-            background: #eee
+        th{
+            background:#eee;
         }
-
-        .vehicle {
-            border: 1px solid #777;
-            margin-top: 15px;
-            padding: 10px
+        .vehicle{
+            border:1px solid #999;
+            margin:5px 0;
+            padding:5px;
         }
-
-        .array {
-            white-space: pre-wrap
+        .vehicle h3{
+            margin:0 0 3px 0;
+            font-size:14px;
         }
-
-        .error {
-            color: red
+        .grid{
+            display:grid;
+            grid-template-columns:repeat(4,1fr);
+            gap:2px 8px;
         }
-
-        .ok {
-            color: green
+        .item{
+            border-bottom:1px dotted #ccc;
+            white-space:nowrap;
+            overflow:hidden;
+        }
+        .key{
+            color:#444;
+        }
+        .array{
+            white-space:pre-wrap;
+            font-size:12px;
+        }
+        .error{
+            color:red;
+        }
+        .ok{
+            color:green;
         }
     </style>
 </head>
 <body>
 
-<h2>ATS TrainTrackPacket 自动解析工具</h2>
+<h3>ATS TrainTrackPacket 紧凑解析工具</h3>
 
-协议：
+协议:
 <select id="protocol">
     <option value="auto">自动识别</option>
     <option value="old">VehicleDataOld</option>
     <option value="new">VehicleData</option>
 </select>
 
-<br><br>
-
-<textarea id="hex" placeholder="输入HEX，支持 AA09A9... 或 AA 09 A9 ..."></textarea>
-<br>
 <button onclick="parsePacket()">解析</button>
+
+<br><br>
+<textarea id="hex" placeholder="输入HEX，支持空格和无空格"></textarea>
 
 <div id="result"></div>
 
 <script>
-
-    class Buffer {
-        constructor(d) {
-            this.d = d;
-            this.p = 0
+    class Buffer{
+        constructor(d){this.d=d;this.p=0}
+        read(n){
+            if(this.p+n>this.d.length) throw "越界 pos="+this.p;
+            return this.d.slice(this.p,this.p+=n);
         }
-
-        read(n) {
-            if (this.p + n > this.d.length) throw "越界 pos=" + this.p;
-            return this.d.slice(this.p, this.p += n)
-        }
-
-        u8() {
-            return this.read(1)[0]
-        }
-
-        u16() {
-            let b = this.read(2);
-            return (b[0] << 8) | b[1]
-        }
-
-        u32() {
-            let b = this.read(4);
-            return (((b[0] << 24) >>> 0) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0
-        }
-
-        remain() {
-            return this.d.length - this.p
-        }
+        u8(){return this.read(1)[0]}
+        u16(){let b=this.read(2);return (b[0]<<8)|b[1]}
+        u32(){let b=this.read(4);return (((b[0]<<24)>>>0)|(b[1]<<16)|(b[2]<<8)|b[3])>>>0}
+        remain(){return this.d.length-this.p}
     }
 
-    function hexToBytes(s) {
-        s = s.replace(/\s/g, "");
-        let a = [];
-        for (let i = 0; i < s.length; i += 2) a.push(parseInt(s.substr(i, 2), 16));
+    function hexToBytes(s){
+        s=s.replace(/\s+/g,"");
+        let a=[];
+        for(let i=0;i<s.length;i+=2)a.push(parseInt(s.substr(i,2),16));
         return a;
     }
+    function ascii(a){return a.map(x=>String.fromCharCode(x)).join("")}
 
-    function ascii(a) {
-        return a.map(x => String.fromCharCode(x)).join("")
-    }
+    function parseBase(b,i){
+        let v={index:i};
+        v.pvid=b.u32();v.infoSrc=b.u8();
+        v.trainId=b.u32();v.tripId=b.u32();v.destId=b.u32();
+        v.lineNoOfDestCode=b.u16();
+        let l=b.u16();v.destCodeLen=l;v.destCode=ascii(b.read(l));
+        v.vehicleType=b.u8();v.cbiCommunication=b.u8();v.flag=b.u8();v.direction=b.u8();
+        v.trackId=b.u32();v.vehNumOfCurTrack=b.u32();v.comVehNumOfCurTrack=b.u32();
+        v.nonComOrder=b.u8();v.trackIndex=b.u8();v.traceStatus=b.u8();v.serviceStatus=b.u8();
 
-    function parseVehicleBase(b, index) {
-        let v = {};
-        v.index = index;
-        v.pvid = b.u32();
-        v.infoSrc = b.u8();
-        v.trainId = b.u32();
-        v.tripId = b.u32();
-        v.destId = b.u32();
-        v.lineNoOfDestCode = b.u16();
-        let dl = b.u16();
-        v.destCodeLen = dl;
-        v.destCode = ascii(b.read(dl));
-        v.vehicleType = b.u8();
-        v.cbiCommunication = b.u8();
-        v.flag = b.u8();
-        v.direction = b.u8();
-        v.trackId = b.u32();
-        v.vehNumOfCurTrack = b.u32();
-        v.comVehNumOfCurTrack = b.u32();
-        v.nonComOrder = b.u8();
-        v.trackIndex = b.u8();
-        v.traceStatus = b.u8();
-        v.serviceStatus = b.u8();
-
-        let depot = b.u16();
-        v.depotDestCodeNumber = depot;
-        v.depotDestItem = [];
-        for (let i = 0; i < depot; i++) {
-            let item = {};
-            item.lineNo = b.u16();
-            let l = b.u16();
-            item.content = ascii(b.read(l));
-            v.depotDestItem.push(item);
+        let dn=b.u16();
+        v.depotDestCodeNumber=dn;
+        v.depotDestItem=[];
+        for(let x=0;x<dn;x++){
+            let it={};
+            it.lineNo=b.u16();
+            let n=b.u16();
+            it.content=ascii(b.read(n));
+            v.depotDestItem.push(it);
         }
 
-        v.driverId = b.u32();
-        v.trainLength = b.u32();
-        v.speed = b.u32();
-        v.stopFlag = b.u8();
+        v.driverId=b.u32();
+        v.trainLength=b.u32();
+        v.speed=b.u32();
+        v.stopFlag=b.u8();
+        v.occupyHeadSegId=b.u32();
+        v.occupyHeadSegOffset=b.u32();
+        v.headSegId=b.u32();
+        v.headSegOffset=b.u32();
+        v.tailSegId=b.u32();
+        v.tailSegOffset=b.u32();
 
-        v.occupyHeadSegId = b.u32();
-        v.occupyHeadSegOffset = b.u32();
-        v.headSegId = b.u32();
-        v.headSegOffset = b.u32();
-        v.tailSegId = b.u32();
-        v.tailSegOffset = b.u32();
+        let sc=b.u32();
+        v.segCnt=sc;
+        v.segIdList=[];
+        for(let x=0;x<sc;x++)v.segIdList.push(b.u32());
 
-        let sc = b.u32();
-        v.segCnt = sc;
-        v.segIdList = [];
-        for (let i = 0; i < sc; i++) v.segIdList.push(b.u32());
-
-        v.activeCcId = b.u8();
-        v.controlLevel = b.u8();
-        v.ccMode = b.u8();
-        v.eb = b.u8();
-        v.ebReason = b.u8();
-        v.fsb = b.u8();
-        v.trainDoorBypassed = b.u8();
-        v.trainDoorClosed = b.u8();
-        v.doorEnableBypass = b.u8();
-
-        v.vEOASecId = b.u32();
-        v.vEOAOffset = b.u32();
-
-        v.trainIntegrity = b.u8();
+        v.activeCcId=b.u8();
+        v.controlLevel=b.u8();
+        v.ccMode=b.u8();
+        v.eb=b.u8();
+        v.ebReason=b.u8();
+        v.fsb=b.u8();
+        v.trainDoorBypassed=b.u8();
+        v.trainDoorClosed=b.u8();
+        v.doorEnableBypass=b.u8();
+        v.vEOASecId=b.u32();
+        v.vEOAOffset=b.u32();
+        v.trainIntegrity=b.u8();
         return v;
     }
 
-    function parseOld(b, i) {
-        let v = parseVehicleBase(b, i);
-        v.protocol = "OLD";
-        v.reserve = Array.from(b.read(20)).map(x => x.toString(16).padStart(2, "0")).join(" ");
+    function old(b,i){
+        let v=parseBase(b,i);
+        v.protocol="OLD";
+        v.reserve=b.read(20);
         return v;
     }
 
-    function parseNew(b, i) {
-        let v = parseVehicleBase(b, i);
-        v.protocol = "NEW";
-        v.ccExLinkStatusNum = b.u8();
-        v.exLinkStatus = [];
-        for (let j = 0; j < v.ccExLinkStatusNum; j++) v.exLinkStatus.push(b.u8());
-        v.reserve = Array.from(b.read(17)).map(x => x.toString(16).padStart(2, "0")).join(" ");
+    function neu(b,i){
+        let v=parseBase(b,i);
+        v.protocol="NEW";
+        v.ccExLinkStatusNum=b.u8();
+        v.exLinkStatus=[];
+        for(let x=0;x<v.ccExLinkStatusNum;x++)v.exLinkStatus.push(b.u8());
+        v.reserve=b.read(17);
         return v;
     }
 
-    function parseInternal(data, p) {
-        let b = new Buffer(data);
-        let r = {};
-        r.header = b.u8();
-        r.length = b.u16();
-        r.msgId = b.u8();
-        let t = b.read(6);
-        r.timestamp = t.map(x => x.toString(16).padStart(2, "0")).join("-");
-        r.serialNo = b.u32();
-        r.vehCnt = b.u16();
-        r.vehIndex = b.u16();
-        r.vehNum = b.u16();
-        r.vehicle = [];
-        for (let i = 0; i < r.vehNum; i++)
-            r.vehicle.push(p == "old" ? parseOld(b, i) : parseNew(b, i));
-        r.end = b.u8();
-        r.crc = b.u32();
-        if (r.end != 0x55 || b.remain() != 0) throw "协议校验失败";
+    function parse(data,p){
+        let b=new Buffer(data),r={};
+        r.header=b.u8();r.length=b.u16();r.msgId=b.u8();
+        r.time=b.read(6);
+        r.serialNo=b.u32();r.vehCnt=b.u16();r.vehIndex=b.u16();r.vehNum=b.u16();
+        r.vehicle=[];
+        for(let i=0;i<r.vehNum;i++)r.vehicle.push(p=="old"?old(b,i):neu(b,i));
+        r.end=b.u8();r.crc=b.u32();
+        if(r.end!=0x55||b.remain()!=0)throw "校验失败";
         return r;
     }
 
-    function detect(data) {
-        try {
-            return ["old", parseInternal(data, "old")]
-        } catch (e) {
-        }
-        try {
-            return ["new", parseInternal(data, "new")]
-        } catch (e) {
-        }
-        throw "无法识别协议";
+    function detect(data){
+        try{return ["old",parse(data,"old")]}catch(e){}
+        try{return ["new",parse(data,"new")]}catch(e){}
+        throw "无法识别";
     }
 
-    function table(obj) {
-        let s = "<table>";
-        for (let k in obj) {
-            let v = obj[k];
-            if (Array.isArray(v) || typeof v == "object")
-                v = "<div class='array'>" + JSON.stringify(v, null, 2) + "</div>";
-            s += "<tr><td>" + k + "</td><td>" + v + "</td></tr>";
+    function compactTable(obj){
+        let h='<div class="grid">';
+        for(let k in obj){
+            let v=obj[k];
+            if(v instanceof Array || typeof v=="object")
+                v=JSON.stringify(v);
+            h+='<div class="item"><span class="key">'+k+':</span>'+v+'</div>';
         }
-        return s + "</table>";
+        return h+"</div>";
     }
 
-    function parsePacket() {
-        try {
-            let data = hexToBytes(document.getElementById("hex").value);
-            let p = document.getElementById("protocol").value;
+    function parsePacket(){
+        try{
+            let data=hexToBytes(document.getElementById("hex").value);
+            let p=document.getElementById("protocol").value;
             let r;
-            if (p == "auto") {
-                let x = detect(data);
-                p = x[0];
-                r = x[1]
-            } else r = parseInternal(data, p);
+            if(p=="auto"){let x=detect(data);p=x[0];r=x[1];}
+            else r=parse(data,p);
 
-            let h = "<h3 class='ok'>协议:" + p + "</h3>";
-            h += table({
-                header: "0x" + r.header.toString(16),
-                length: r.length,
-                msgId: "0x" + r.msgId.toString(16),
-                timestamp: r.timestamp,
-                serialNo: r.serialNo,
-                vehNum: r.vehNum,
-                end: "0x" + r.end.toString(16),
-                crc: "0x" + r.crc.toString(16).toUpperCase()
+            let h='<h3 class="ok">协议:'+p+'</h3>';
+            h+=compactTable({
+                header:r.header.toString(16).toUpperCase(),
+                length:r.length,
+                msgId:r.msgId.toString(16).toUpperCase(),
+                vehNum:r.vehNum,
+                crc:r.crc.toString(16).toUpperCase()
             });
 
-            r.vehicle.forEach(v => {
-                h += "<div class='vehicle'><h3>Vehicle " + v.index + "</h3>" + table(v) + "</div>";
+            r.vehicle.forEach(v=>{
+                h+='<div class="vehicle"><h3>Vehicle '+v.index+'</h3>';
+                h+=compactTable(v);
+                h+='</div>';
             });
 
-            document.getElementById("result").innerHTML = h;
-
-        } catch (e) {
-            document.getElementById("result").innerHTML = "<p class='error'>解析失败:" + e + "</p>";
+            document.getElementById("result").innerHTML=h;
+        }catch(e){
+            document.getElementById("result").innerHTML='<p class="error">解析失败:'+e+'</p>';
         }
     }
-
 </script>
 </body>
 </html>
