@@ -1,0 +1,355 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiView => BiMSS 报文组装工具 (修正版 - 大端/动态长度)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        h2 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #34495e; padding-bottom: 10px; }
+        .container { display: flex; flex: 1; gap: 20px; min-height: 0; }
+        .panel {
+            flex: 1;
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .panel-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #34495e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        textarea {
+            flex: 1;
+            width: 100%;
+            padding: 12px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            resize: none;
+            box-sizing: border-box;
+            background-color: #fcfcfc;
+            color: #2c3e50;
+        }
+        textarea:focus {
+            border-color: #3498db;
+            outline: none;
+            background-color: #fff;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #2980b9; }
+        button.secondary { background-color: #2ecc71; }
+        button.secondary:hover { background-color: #27ae60; }
+        .result-box {
+            flex: 1;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            word-break: break-all;
+            font-size: 14px;
+            line-height: 1.5;
+            border: 1px solid #111;
+        }
+        .note {
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-top: 10px;
+            line-height: 1.6;
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+        .highlight-tag {
+            background-color: #e74c3c;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+
+<h2>BiView => BiMSS 列车PIS/ATS报文组装工具 (修正版)</h2>
+
+<div class="container">
+    <!-- 左侧：JSON 输入区域 -->
+    <div class="panel">
+        <div class="panel-title">
+            <span>输入报文数据 (JSON 格式):</span>
+        </div>
+        <textarea id="jsonInput"></textarea>
+        <div class="btn-group">
+            <button onclick="generateHex()">生成 16 进制报文</button>
+            <button class="secondary" onclick="copyToClipboard()">复制 Hex 结果</button>
+        </div>
+        <div class="note">
+            <b>💡 修正说明：</b><br>
+            1. <b>字节序变更：</b> 全局严格采用 <b>Big-Endian (大端/网络字节序)</b> 编码。<br>
+            2. <b>动态字符串：</b> 废除原 21 字节固定长度，改用 <code>uint16 长度 + 实际字符</code> 动态变长结构。<br>
+            3. <b>结构体同步：</b> 新增 <code>trainServiceId (TID 服务号)</code> 及 <code>runLine (上下行轨道)</code> 字段。
+        </div>
+    </div>
+
+    <!-- 右侧：生成结果区域 -->
+    <div class="panel">
+        <div class="panel-title">
+            <span>十六进制结果 (Hex String):</span>
+            <span class="highlight-tag">Big Endian</span>
+        </div>
+        <div id="hexOutput" class="result-box">点击左侧生成按钮...</div>
+        <div class="panel-title" style="margin-top: 15px; margin-bottom: 5px;">
+            <span>解析日志 (供调试):</span>
+        </div>
+        <div id="logOutput" class="result-box" style="flex: 0.6; background-color: #f8f9fa; color: #2c3e50; border: 1px solid #dcdde1;"></div>
+    </div>
+</div>
+
+<script>
+    // 基于最新定义对齐的默认数据
+    const defaultData = {
+        "HEADER": 170, // 0xAA
+        "MSG_ID": 146, // 0x92
+        "STAMP": "2026-07-03 12:00:00", // 格式: YYYY-MM-DD HH:MM:SS
+        "SN": 1,
+        "NID_Station_ID": 1,
+        "NID_Platform_ID": 2,
+        "Trains": [
+            {
+                "trainId": 1,               // PVID 车组号
+                "trainServiceId": 301,         // TID 服务号
+                "firstTrain": 0,               // 是否首班车
+                "lastTrain": 0,                // 是否末班车
+                "stationPlatformState": 255,   // 到站状态默认0xFF
+                "arrivalTime": "2026-07-03 12:05:00",
+                "departureTime": "2026-07-03 12:06:30",
+                "planArrivalTime": "2026-07-03 12:05:00",
+                "planDepartureTime": "2026-07-03 12:06:00",
+                "terminalStationId": 1,     // 终点车站ID
+                "destinationCode": "DEST-99",  // 目的码字符串
+                "nextStationId": 4294967295,   // 下一站停站车站号默认0xFFFFFFFF
+                "trainDirection": 1,           // 列车方向
+                "trainNear": 0,                // 是否接近站台轨道
+                "trainPassenger": 1,           // 是否载客
+                "trainSpeedFlag": 0,           // 快慢车标识
+                "trainHoldFlag": 0,            // 扣车标志
+                "skipStopFlag": 0,             // 跳停标志
+                "runLine": 1                   // 列车位于上下行线
+            }
+        ]
+    };
+
+    document.getElementById('jsonInput').value = JSON.stringify(defaultData, null, 4);
+
+    // 辅助构建字节数组 (已变更为 Big Endian 大端序列)
+    class BufferBuilder {
+        constructor(size = 8192) {
+            this.buffer = new Uint8Array(size);
+            this.view = new DataView(this.buffer.buffer);
+            this.offset = 0;
+        }
+
+        addU8(val) { this.view.setUint8(this.offset, val); this.offset += 1; }
+        addU16(val) { this.view.setUint16(this.offset, val, false); this.offset += 2; } // false = Big Endian
+        addU32(val) { this.view.setUint32(this.offset, val, false); this.offset += 4; }
+
+        addReserved(len) { for(let i=0; i<len; i++) this.addU8(0); }
+
+        // 写入变长/动态字符串：先写 2 字节长度，再写字符内容
+        addDynamicString(str) {
+            const encoder = new TextEncoder();
+            const bytes = encoder.encode(str || "");
+            this.addU16(bytes.length); // 写入长度字段 (uint16)
+            for(let i=0; i < bytes.length; i++) {
+                this.addU8(bytes[i]); // 写入实际字符字节
+            }
+            return bytes.length;
+        }
+
+        getBytes() { return this.buffer.slice(0, this.offset); }
+    }
+
+    // CCITT CRC32 计算 (0x04C11DB7), 初始值 0xFFFFFFFF, 严格按字节流顺序
+    function calculateCRC32(data, start, end) {
+        let crc = 0xFFFFFFFF;
+        for (let i = start; i < end; i++) {
+            crc ^= (data[i] << 24);
+            for (let j = 0; j < 8; j++) {
+                if ((crc & 0x80000000) !== 0) {
+                    crc = ((crc << 1) ^ 0x04C11DB7) >>> 0;
+                } else {
+                    crc = (crc << 1) >>> 0;
+                }
+            }
+        }
+        return crc >>> 0;
+    }
+
+    function log(msg) {
+        const logBox = document.getElementById('logOutput');
+        logBox.innerHTML += msg + "<br>";
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function generateHex() {
+        document.getElementById('logOutput').innerHTML = "";
+        try {
+            const data = JSON.parse(document.getElementById('jsonInput').value);
+            const bb = new BufferBuilder();
+
+            log("🚀 开始按照最新定义(Big Endian)组装报文...");
+
+            // 1. HEADER (固定 0xAA)
+            bb.addU8(data.HEADER || 0xAA);
+
+            // 2. LEN (占位 2 字节，稍后回填)
+            const lenOffset = bb.offset;
+            bb.addU16(0);
+
+            // 3. MSG_ID (开始计入 LEN 范围和 CRC 校验)
+            const msgIdOffset = bb.offset;
+            bb.addU8(data.MSG_ID || 0x92);
+
+            // 4. STAMP (6 字节时间戳)
+            const dateObj = new Date(data.STAMP);
+            if (isNaN(dateObj.getTime())) {
+                throw new Error("STAMP 时间格式不合法，请采用 YYYY-MM-DD HH:MM:SS 格式");
+            }
+            bb.addU8(dateObj.getFullYear() - 2000);
+            bb.addU8(dateObj.getMonth() + 1);
+            bb.addU8(dateObj.getDate());
+            bb.addU8(dateObj.getHours());
+            bb.addU8(dateObj.getMinutes());
+            bb.addU8(dateObj.getSeconds());
+
+            // 5. SN, 6. NID_Station_ID, 7. NID_Platform_ID
+            bb.addU32(data.SN || 1);
+            bb.addU32(data.NID_Station_ID || 0);
+            bb.addU32(data.NID_Platform_ID || 0);
+
+            // 8. Reserve1 (20 字节)
+            bb.addReserved(20);
+
+            // 9. N_Train_Cnt (列车循环数)
+            const trains = data.Trains || [];
+            bb.addU32(trains.length);
+            log(`包含列车数: ${trains.length}`);
+
+            trains.forEach((t, index) => {
+                log(`----------------------------------------`);
+                log(`正在组装第 ${index + 1} 辆列车 (Train ID: ${t.trainId || 0})...`);
+
+                bb.addU32(t.trainId || 0);         // trainId
+                bb.addU32(t.trainServiceId || 0);  // trainServiceId
+                bb.addU8(t.firstTrain || 0);       // firstTrain
+                bb.addU8(t.lastTrain || 0);        // lastTrain
+                bb.addU8(t.stationPlatformState !== undefined ? t.stationPlatformState : 0xFF); // stationPlatformState
+
+                // 动态变长字符串组装
+                let len = 0;
+                len = bb.addDynamicString(t.arrivalTime);       log(` -> 预计到站时间长度: ${len}`);
+                len = bb.addDynamicString(t.departureTime);     log(` -> 预计离站时间长度: ${len}`);
+                len = bb.addDynamicString(t.planArrivalTime);   log(` -> 计划到站时间长度: ${len}`);
+                len = bb.addDynamicString(t.planDepartureTime); log(` -> 计划离站时间长度: ${len}`);
+
+                bb.addU32(t.terminalStationId || 0); // terminalStationId
+                len = bb.addDynamicString(t.destinationCode);   log(` -> 目的码字符串长度: ${len}`);
+
+                bb.addU32(t.nextStationId !== undefined ? t.nextStationId : 0xFFFFFFFF); // nextStationId
+                bb.addU8(t.trainDirection || 0);   // trainDirection
+                bb.addU8(t.trainNear || 0);        // trainNear
+                bb.addU8(t.trainPassenger || 0);   // trainPassenger
+                bb.addU8(t.trainSpeedFlag || 0);   // trainSpeedFlag
+                bb.addU8(t.trainHoldFlag || 0);    // trainHoldFlag
+                bb.addU8(t.skipStopFlag || 0);     // skipStopFlag
+                bb.addU8(t.runLine || 0);          // runLine
+
+                // reserve2 = 20 字节
+                bb.addReserved(20);
+            });
+
+            // 10. END
+            const endOffset = bb.offset;
+            bb.addU8(0x55);
+
+            // 计算 LEN 并回填 (从 MSG_ID 开始到包含随后的 CRC 的末尾)
+            // LEN = (当前长度 + 4 字节 CRC) - msgIdOffset
+            const frameLength = (endOffset + 1 + 4) - msgIdOffset;
+            bb.view.setUint16(lenOffset, frameLength, false); // 写入大端 LEN
+            log(`----------------------------------------`);
+            log(`✨ 计算完成！帧长度 (LEN): ${frameLength} 字节 (包含从 MSG_ID 到 CRC 结束)`);
+
+            // 11. 计算 CRC (范围：LEN 到 END)
+            const finalBuffer = bb.buffer;
+            const crcStart = lenOffset;
+            const crcEnd = endOffset + 1; // 包含 END 节点
+
+            const crcValue = calculateCRC32(finalBuffer, crcStart, crcEnd);
+            log(`🔒 计算 CCITT CRC32: 0x${crcValue.toString(16).toUpperCase().padStart(8, '0')}`);
+
+            // 追加大端 CRC 校验码
+            bb.addU32(crcValue);
+
+            // 转化为16进制大写字符串展示
+            const resultBytes = bb.getBytes();
+            const hexArray = Array.from(resultBytes).map(b => b.toString(16).padStart(2, '0').toUpperCase());
+
+            document.getElementById('hexOutput').innerText = hexArray.join(' ');
+            log(`<span style="color: #2ecc71; font-weight:bold;">组装成功！最终报文总字节数: ${resultBytes.length} 字节</span>`);
+
+        } catch (e) {
+            log(`<span style="color: #e74c3c; font-weight:bold;">错误: ${e.message}</span>`);
+            document.getElementById('hexOutput').innerText = "组装失败，请检查数据格式。";
+        }
+    }
+
+    function copyToClipboard() {
+        const text = document.getElementById('hexOutput').innerText;
+        if (text.startsWith("点击") || text.startsWith("组装失败")) return;
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Hex 报文已成功复制至剪贴板！");
+        }).catch(err => {
+            alert("复制失败: " + err);
+        });
+    }
+</script>
+</body>
+</html>
