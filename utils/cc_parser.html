@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CC → MSS 主系监控报文解析器</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 24px;
+            color: #172033;
+            background: #f3f6fb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
+        .container { max-width: 1500px; margin: 0 auto; }
+        h1 { margin: 0 0 8px; font-size: 28px; }
+        .subtitle { margin: 0 0 20px; color: #5f6b7a; }
+        .card {
+            margin-bottom: 18px;
+            padding: 20px;
+            border: 1px solid #dce3ee;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 5px 18px rgba(31, 49, 79, .06);
+        }
+        label { display: block; margin-bottom: 8px; font-weight: 700; }
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 13px;
+            border: 1px solid #b9c5d6;
+            border-radius: 8px;
+            font: 14px/1.55 Consolas, "Courier New", monospace;
+            resize: vertical;
+        }
+        textarea:focus { outline: 2px solid #bfdbfe; border-color: #2563eb; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        button {
+            padding: 10px 18px;
+            border: 0;
+            border-radius: 7px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .primary { color: #fff; background: #2563eb; }
+        .secondary { color: #263244; background: #e8edf5; }
+        .error {
+            display: none;
+            margin-top: 14px;
+            padding: 11px 13px;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            border-radius: 7px;
+            background: #fef2f2;
+        }
+        .summary { display: flex; flex-wrap: wrap; gap: 10px; }
+        .badge {
+            padding: 7px 10px;
+            border-radius: 999px;
+            color: #334155;
+            background: #eef2f7;
+            font-size: 13px;
+        }
+        .badge.ok { color: #166534; background: #dcfce7; }
+        .badge.bad { color: #991b1b; background: #fee2e2; }
+        h2 { margin: 0 0 14px; font-size: 19px; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 9px 10px; border-bottom: 1px solid #e5eaf1; text-align: left; vertical-align: top; }
+        th { position: sticky; top: 0; color: #fff; background: #334155; white-space: nowrap; }
+        tr:hover td { background: #f8fafc; }
+        tr.invalid td { background: #fff1f2; }
+        .field { font-weight: 650; white-space: nowrap; }
+        .mono { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
+        .desc { min-width: 260px; white-space: normal; }
+        pre {
+            max-height: 280px;
+            margin: 0;
+            padding: 14px;
+            overflow: auto;
+            color: #dbeafe;
+            border-radius: 8px;
+            background: #111827;
+            font: 13px/1.6 Consolas, "Courier New", monospace;
+        }
+        .hidden { display: none; }
+        @media (max-width: 720px) { body { padding: 12px; } .card { padding: 14px; } }
+    </style>
+</head>
+<body>
+<main class="container">
+    <h1>CC → MSS 主系监控报文解析器</h1>
+    <p class="subtitle">依据 <code>cc.gen</code> 及生成的 <code>cc.gb.cpp</code>：大端序，支持 CCMsg、CCPubMsg（202/208/210）和 CCPrvMsg（203/206/209/212）。子报文长度字段仅展示，解析步进与服务端解码器保持一致。</p>
+
+    <section class="card">
+        <label for="hexInput">十六进制报文</label>
+        <textarea id="hexInput" spellcheck="false" placeholder="粘贴完整 CCMsg 报文；支持空格、换行、逗号、冒号、下划线和连字符分隔"></textarea>
+        <div class="actions">
+            <button class="primary" type="button" id="parseBtn">解析报文</button>
+            <button class="secondary" type="button" id="exampleBtn">载入结构示例</button>
+            <button class="secondary" type="button" id="clearBtn">清空</button>
+        </div>
+        <div id="error" class="error"></div>
+    </section>
+
+    <section id="result" class="hidden">
+        <div class="card"><div id="summary" class="summary"></div></div>
+        <div class="card">
+            <h2>字段解析</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>#</th><th>字段</th><th>偏移</th><th>长度</th><th>类型</th><th>原始值</th><th>解析值</th><th>说明</th></tr></thead>
+                    <tbody id="fieldBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card"><h2>原始数据</h2><pre id="hexDump"></pre></div>
+    </section>
+</main>
+
+<script>
+    const CRC32_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let data = (i << 24) >>> 0;
+            let value = 0;
+            for (let bit = 0; bit < 8; bit++) {
+                value = ((data ^ value) & 0x80000000) ? (((value << 1) ^ 0x04C11DB7) >>> 0) : ((value << 1) >>> 0);
+                data = (data << 1) >>> 0;
+            }
+            table[i] = value >>> 0;
+        }
+        return table;
+    })();
+
+    function crc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (const byte of bytes) crc = (((crc << 8) >>> 0) ^ CRC32_TABLE[((crc >>> 24) & 0xFF) ^ byte]) >>> 0;
+        return crc >>> 0;
+    }
+
+    function toHex(value, byteLength) {
+        const source = typeof value === 'bigint' ? value.toString(16) : Number(value).toString(16);
+        return '0x' + source.toUpperCase().padStart(byteLength * 2, '0').slice(-byteLength * 2);
+    }
+
+    function bytesToHex(bytes) {
+        return Array.from(bytes, byte => byte.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+    }
+
+    function parseHex(input) {
+        const clean = input.replace(/0x/gi, '').replace(/[\s,;:_-]+/g, '');
+        if (!clean) throw new Error('请输入十六进制报文。');
+        if (!/^[0-9a-f]+$/i.test(clean)) throw new Error('输入中含有非十六进制字符。');
+        if (clean.length % 2) throw new Error('十六进制字符数必须为偶数。');
+        const bytes = new Uint8Array(clean.length / 2);
+        for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+        return bytes;
+    }
+
+    class Reader {
+        constructor(bytes, fields, start = 0, limit = bytes.length, prefix = '') {
+            this.bytes = bytes;
+            this.fields = fields;
+            this.offset = start;
+            this.limit = limit;
+            this.prefix = prefix;
+        }
+        remaining() { return this.limit - this.offset; }
+        ensure(length) {
+            if (length < 0 || this.offset + length > this.limit) {
+                throw new Error(`报文长度不足：${this.prefix || 'CCMsg'} 在偏移 ${toHex(this.offset, 2)} 还需要 ${length} 字节，仅剩 ${this.remaining()} 字节。`);
+            }
+        }
+        add(name, start, length, type, value, desc = '', valid = null) {
+            const raw = this.bytes.slice(start, start + length);
+            this.fields.push({ name: this.prefix + name, start, length, type, raw, value: String(value), desc, valid });
+        }
+        u8(name, desc = '', formatter = null) {
+            this.ensure(1); const start = this.offset; const value = this.bytes[this.offset++];
+            this.add(name, start, 1, 'uint8', formatter ? formatter(value) : value, desc); return value;
+        }
+        u16(name, desc = '') {
+            this.ensure(2); const start = this.offset;
+            const value = (this.bytes[this.offset] << 8) | this.bytes[this.offset + 1]; this.offset += 2;
+            this.add(name, start, 2, 'uint16', value, desc); return value;
+        }
+        i16(name, desc = '') {
+            const value = this.u16(name, desc); const signed = value > 0x7FFF ? value - 0x10000 : value;
+            this.fields[this.fields.length - 1].type = 'int16'; this.fields[this.fields.length - 1].value = String(signed); return signed;
+        }
+        u32(name, desc = '') {
+            this.ensure(4); const start = this.offset;
+            const value = (((this.bytes[this.offset] << 24) >>> 0) | (this.bytes[this.offset + 1] << 16) |
+                (this.bytes[this.offset + 2] << 8) | this.bytes[this.offset + 3]) >>> 0; this.offset += 4;
+            this.add(name, start, 4, 'uint32', value, desc); return value;
+        }
+        i32(name, desc = '') {
+            const value = this.u32(name, desc); const signed = value > 0x7FFFFFFF ? value - 0x100000000 : value;
+            this.fields[this.fields.length - 1].type = 'int32'; this.fields[this.fields.length - 1].value = String(signed); return signed;
+        }
+        u64(name, desc = '') {
+            this.ensure(8); const start = this.offset; let value = 0n;
+            for (let i = 0; i < 8; i++) value = (value << 8n) | BigInt(this.bytes[this.offset++]);
+            this.add(name, start, 8, 'uint64', value, desc); return value;
+        }
+        byteArray(name, length, desc = '') {
+            this.ensure(length); const start = this.offset; this.offset += length;
+            this.add(name, start, length, `uint8[${length}]`, bytesToHex(this.bytes.slice(start, this.offset)), desc);
+            return this.bytes.slice(start, this.offset);
+        }
+        bits(name, length, names, desc = '') {
+            this.ensure(length); const start = this.offset; let value = 0n;
+            for (let i = 0; i < length; i++) value = (value << 8n) | BigInt(this.bytes[this.offset++]);
+            const active = names.map((item, index) => ((value >> BigInt(index)) & 1n) ? item : null).filter(Boolean);
+            const detail = names.length ? (active.length ? `置位：${active.join('、')}` : '所有已定义位均为0') : `位图值：${toHex(value, length)}`;
+            this.add(name, start, length, `bitset(${length * 8})`, toHex(value, length), desc ? `${desc}；${detail}` : detail);
+            return value;
+        }
+    }
+
+    const boolDesc = value => value === 0 ? '0（否/正常）' : value === 1 ? '1（是/故障）' : `${value}（非法或无效）`;
+    const driveMode = value => ({0:'NOM',1:'RM',2:'CMI',3:'AMI',4:'CMC',5:'AMC',6:'CAM',7:'FAM',8:'CME',9:'AME',10:'AME',255:'无效'})[value] ?? `未知(${value})`;
+    const ctrlLevel = value => ({0:'DEF',1:'ILC',2:'ITC',3:'CTC',4:'UTO',255:'无效'})[value] ?? `未知(${value})`;
+
+    function parsePubMsg(bytes, fields, start, length) {
+        const end = start + length;
+        if (end > bytes.length) throw new Error(`PubMsgLen=${length} 超出报文范围。`);
+        const r = new Reader(bytes, fields, start, end, 'CCPubMsg.');
+        const innerId = r.u8('msg_id', '固定值：202、208或210');
+        r.u16('verison_no', '默认值0x2001');
+        const timeStart = r.offset; const time = r.byteArray('time_stamp', 6, '年/月/日/时/分/秒');
+        fields[fields.length - 1].value = `20${String(time[0]).padStart(2, '0')}-${String(time[1]).padStart(2, '0')}-${String(time[2]).padStart(2, '0')} ${String(time[3]).padStart(2, '0')}:${String(time[4]).padStart(2, '0')}:${String(time[5]).padStart(2, '0')}`;
+        fields[fields.length - 1].start = timeStart;
+        r.u16('driver_no', '司机号');
+        r.u8('highdrvmode', '最高驾驶模式', driveMode);
+        r.u8('ctrllevel', '当前控制级别', ctrlLevel);
+        r.u8('drvmode', '当前驾驶模式', driveMode);
+        r.u16('speed', '列车速度；0xFFFF无效');
+        r.u16('ebspeed', '紧急制动触发速度；0xFFFF无效');
+        r.bits('stATPDetailFault', 4, ['A.PSU','A.COM','A.PPU','A.DRU','A.VC1','A.VC2','A.VOB1','A.VOB2','A.VOB3','A.VIB1','A.VIB2','A.VIB3','B.PSU','B.COM','B.PPU','B.DRU','B.VC1','B.VC2','B.VOB1','B.VOB2','B.VOB3','B.VIB1','B.VIB2','B.VIB3'], 'ATP板级故障');
+        r.bits('stATPInitRst', 4, [], 'ATP设备自检结果');
+        r.bits('stDeviceFault', 2, ['BTM','雷达','OPGA','OPGB','TMS','MRA','MRB','LCC','LCP','TOD'], '设备故障');
+        r.bits('stATODetailFault', 4, ['A.PPU','A.ATO','B.PPU','B.ATO'], 'ATO板级故障');
+        r.u32('platform_id', '站台ID；0表示无效');
+        r.bits('atoOptFault', 1, ['速度/位置错误','保留','CC模式错误','控制量输出响应异常','ATP触发EB','列车系统故障','CAM过标超距','无电区蓄电池欠压'], 'ATO运行故障');
+        r.u8('train_cut_off', '列车切断牵引', boolDesc);
+        r.u64('train_cutoff_reason', '列车切断牵引原因');
+        r.u8('atp_fsb', '常用制动状态', boolDesc);
+        r.u32('atpFsbReason', '常用制动原因');
+        r.u8('atp_eb', '紧急制动状态', boolDesc);
+        r.u32('atpEbReason', '紧急制动原因');
+        r.u8('atp_lose_loc', '位置丢失状态', boolDesc);
+        r.u64('atpLoseLocRsn', '位置丢失原因位图');
+        r.u8('train_brake_fault', '制动力故障', boolDesc);
+        r.u8('fullload_ratio', '乘客满载率；255无效');
+        r.u32('map_version', '车载电子地图版本');
+        r.u32('atp_version', 'ATP软件版本');
+        r.u32('ato_version', 'ATO软件版本');
+        r.u32('mmi_version', 'MMI软件版本');
+        r.i16('stopped_precision_atp', 'ATP停车精度');
+        r.i16('stopped_precision_ato', 'ATO停车精度');
+        r.byteArray('check_result', 6, '自定义保留');
+        for (const name of ['zc1','zc2','ats1','ats2','cbi']) {
+            r.u32(`${name}_id`, `${name.toUpperCase()} ID`);
+            r.u8(`${name}_com_fault`, `${name.toUpperCase()}通信状态`);
+        }
+        r.u8('trn_com_fault', '车头车尾通信故障');
+        r.u8('tms_com_fault', 'TMS通信故障');
+        r.u8('head_or_tail', '激活端：1-TC1，2-TC2，0xFF无效');
+        r.byteArray('ExtendInitRst', 8, '扩展自检结果');
+        r.u8('IsWakeUpInit', '是否唤醒自检');
+        r.u8('rsved', '保留');
+        const crcFieldIndex = fields.length;
+        const received = r.u32('subcrc32', 'CCPubMsg子报文CRC32');
+        if (r.offset < end) r.byteArray('trailing_data', end - r.offset, '声明长度中超出cc.gen结构的尾部数据');
+        if (r.offset > end) throw new Error('CCPubMsg字段长度超过PubMsgLen。');
+        if (length >= 135) {
+            const calculated = crc32(bytes.slice(start, start + 131));
+            fields[crcFieldIndex].valid = calculated === received;
+            fields[crcFieldIndex].desc += `；计算值 ${toHex(calculated, 4)}`;
+        }
+        return innerId;
+    }
+
+    function parsePrvMsg(bytes, fields, start, length) {
+        const end = start + length;
+        if (end > bytes.length) throw new Error(`PrvMsgLen=${length} 超出报文范围。`);
+        const r = new Reader(bytes, fields, start, end, 'CCPrvMsg.');
+        const innerId = r.u8('msg_id', '固定值：203、206、209或212');
+        r.u8('atp_cut_off', 'ATP切除状态', boolDesc);
+        r.u8('host_style', 'CC主备状态：AA/55/77/99/FF');
+        r.u8('syncState', '主备同步状态', boolDesc);
+        r.u8('mode_btn_press_fail', '模式开关错误按下', boolDesc);
+        r.u8('wheel_dia_cal_fail', '轮径校准失败', boolDesc);
+        r.bits('stTrainAbrMove', 1, ['后溜','前溜','打滑','空转','退行'], '列车异常移动');
+        for (const [name, desc] of [
+            ['runovertime','CC超时运行'],['doorstateBypass','车门状态旁路'],['dooruseBypass','车门使能旁路'],
+            ['doorOCAbr','车门自动开关异常'],['pltTrainDoorDiffer','车门与屏蔽门不一致'],['traindoorOpenAbr','车门异常打开'],
+            ['emergencyExitAbr','逃生门异常打开'],['ebfailure','紧急制动失效'],['tractionAlarm','牵引异常'],
+            ['obstacleAlarm','障碍物异常'],['stopAlignment','停车对位'],['undervoltageAlarm','蓄电池欠压'],
+            ['trainFireAlarm','车辆火灾'],['bogieAlarm','转向架异常'],['bridgeCoverOpen','驾驶台盖板打开'],
+            ['shieldedCabinetOpen','车辆屏柜打开'],['emergencyHandleOff','紧急手柄拉下']
+        ]) r.u8(name, desc);
+        r.bits('dormancyFailure', 1, ['不在休眠窗口','非FAM','钥匙未关闭','列车故障','蓄电池欠压'], '休眠失败原因');
+        r.bits('awakeFailure', 1, ['列车已上电','蓄电池欠压'], '唤醒失败原因');
+        r.bits('awakeTestFail', 4, [], '唤醒上电测试失败原因');
+
+        const doorCount = r.u8('traindoorAbrNum', '车门单门异常数量');
+        for (let i = 0; i < doorCount; i++) r.bits(`doorAbrs[${i}]`, 1, ['打开','关闭','解锁故障','隔离','故障','关门故障','开门故障','状态丢失'], '车门单门状态');
+        const trainFailCount = r.u16('trainFailNum', '车辆故障字节数');
+        r.byteArray('trainfails', trainFailCount, '车辆故障保留数据');
+        const operationCount = r.u8('operationNum', '操作记录数量');
+        for (let i = 0; i < operationCount; i++) {
+            r.u8(`operations[${i}].type`, '操作类型');
+            r.u16(`operations[${i}].objId`, '操作对象ID');
+            r.u8(`operations[${i}].result`, '操作结果：0失败，1成功');
+        }
+        for (const [name, desc] of [
+            ['vehicleID','列车VID'],['maxHeadId','最大车头区段号'],['maxHeadOffset','最大车头区段偏移'],
+            ['minHeadId','最小车尾区段号'],['minHeadOffset','最小车尾区段偏移'],['malId','MAL区段号'],['malOffset','MAL区段偏移']
+        ]) r.u32(name, desc);
+        r.u8('trainDir', '列车方向：0未知，1向左，2向右');
+        r.u8('stopStable', '停稳状态');
+        r.u8('stopAccurate', '停准状态');
+        const displayCount = r.u8('trainDispStateCount', '列车显示状态字节数');
+        r.byteArray('trainDispStates', displayCount, '列车显示状态');
+        const beaconCount = r.u8('staticBeaconLostNum', '丢失静态信标数量');
+        for (let i = 0; i < beaconCount; i++) r.u32(`staticBeaconLostIds[${i}]`, '丢失的静态信标ID');
+
+        let extensionLength = r.remaining() - 19;
+        if (extensionLength < 0) throw new Error('CCPrvMsg长度不足，无法容纳15字节保留区和subcrc32。');
+        if (extensionLength >= 4) { r.u32('standbyInitRst', '备系自检结果（206）'); extensionLength -= 4; }
+        if (extensionLength >= 9) { r.byteArray('ExtendInitRst', 8, '扩展自检结果'); r.u8('IsWakeUpInit', '是否唤醒自检'); extensionLength -= 9; }
+        if (extensionLength >= 23) {
+            r.u16('maxWheelDiameter', '最大轮径（209）'); r.u16('minWheelDiameter', '最小轮径（209）'); r.u16('rawWheelDiameter', '原始轮径（209）');
+            r.i16('accel', '实时加速度（209）'); r.i32('refSpeed', '推荐速度（209）'); r.i16('Effort', '牵引制动输出（209）');
+            r.i32('LocErrDist', '定位误差（209）'); r.i16('BatteryVoltageTC1', 'TC1蓄电池电压（209）');
+            r.i16('BatteryVoltageTC2', 'TC2蓄电池电压（209）'); r.u8('OprationalStatus', '运营状态（209）'); extensionLength -= 23;
+        }
+        if (extensionLength >= 18) {
+            r.u16('maxWheelDiameterB', 'OPGB最大轮径（212）'); r.u16('minWheelDiameterB', 'OPGB最小轮径（212）');
+            r.u16('rawWheelDiameterB', 'OPGB原始轮径（212）'); r.i16('accelB', 'OPGB实时加速度（212）');
+            for (const name of ['JumpFailMask','JumpBakError','Jumpstate','SleepingState','WakeSuccess','WakeupStatus']) r.u8(name, '212扩展字段');
+            r.u32('BeaconReadId', '读到的信标ID（212）'); extensionLength -= 18;
+        }
+        if (extensionLength > 0) r.byteArray('unknownExtension', extensionLength, '未识别的版本扩展字段');
+        r.byteArray('rsved', 15, '保留');
+        const crcFieldIndex = fields.length;
+        const received = r.u32('subcrc32', 'CCPrvMsg子报文CRC32');
+        if (length >= 4) {
+            const calculated = crc32(bytes.slice(start, end - 4));
+            fields[crcFieldIndex].valid = calculated === received;
+            fields[crcFieldIndex].desc += `；按服务端传入长度计算值 ${toHex(calculated, 4)}`;
+        }
+        if (r.offset < end) r.byteArray('trailing_data', end - r.offset, '声明长度中的额外数据');
+        return innerId;
+    }
+
+    function parseCCMsg(bytes) {
+        if (bytes.length < 23) throw new Error('报文过短，无法构成CCMsg。');
+        const fields = [];
+        const r = new Reader(bytes, fields, 0, bytes.length, 'CCMsg.');
+        const frameTypeIndex = fields.length; const frameType = r.u8('rpheader.frame_type', '固定值0xFF');
+        fields[frameTypeIndex].valid = frameType === 0xFF;
+        const frameLenIndex = fields.length; const frameLen = r.u16('rpheader.frame_len', '从第4字节到报文末尾的长度');
+        fields[frameLenIndex].valid = frameLen === bytes.length - 3;
+        fields[frameLenIndex].desc += `；实际值 ${bytes.length - 3}`;
+        const sendFlagIndex = fields.length; const sendFlag = r.u8('rpheader.sendflag.flag', '固定值0x10（VOBC）');
+        fields[sendFlagIndex].valid = sendFlag === 0x10;
+        r.u8('rpheader.sendflag.com_id', '厂家ID');
+        const ccInfoStart = r.offset; const ccInfo = r.u16('rpheader.sendflag.info', '低2位cc_id，高12位cc_pvid');
+        fields[fields.length - 1].value = `cc_id=${ccInfo & 0x03}, cc_pvid=${(ccInfo >>> 2) & 0x0FFF}`;
+        fields[fields.length - 1].start = ccInfoStart;
+        const recvFlagIndex = fields.length; const recvFlag = r.u8('rpheader.recvflag.flag', '固定值0x20（MSS）');
+        fields[recvFlagIndex].valid = recvFlag === 0x20;
+        r.u8('rpheader.recvflag.com_id', '厂家ID');
+        r.u16('rpheader.recvflag.mssId', 'MSS ID');
+        r.u32('rpheader.msg_seq', '报文序列号，初始值1');
+        const msgNumIndex = fields.length; const msgNum = r.u8('msg_num', '固定值2'); fields[msgNumIndex].valid = msgNum === 2;
+
+        const pubWrapperIndex = fields.length; const pubMsgId = r.u8('pubMsgId', '固定值202、208或210');
+        fields[pubWrapperIndex].valid = [202, 208, 210].includes(pubMsgId);
+        const pubLenFieldIndex = fields.length;
+        const pubLen = r.u16('pubMsgLen', '发送端填写的CCPubMsg长度');
+        const pubStart = r.offset;
+        const actualPubLen = 135;
+        fields[pubLenFieldIndex].desc += `；服务端CCPubMsg::get_srclength()固定为${actualPubLen}，偏移推进不使用该字段`;
+        const innerPubId = parsePubMsg(bytes, fields, pubStart, actualPubLen); r.offset = pubStart + actualPubLen;
+        fields[pubWrapperIndex].desc += `；内部msg_id=${innerPubId}`;
+        if (innerPubId !== pubMsgId) fields[pubWrapperIndex].valid = false;
+
+        const prvWrapperIndex = fields.length; const prvMsgId = r.u8('prvMsgId', '固定值203、206、209或212');
+        fields[prvWrapperIndex].valid = [203, 206, 209, 212].includes(prvMsgId);
+        const prvLenFieldIndex = fields.length;
+        const prvLen = r.u16('prvMsgLen', '发送端填写的CCPrvMsg长度');
+        const prvStart = r.offset;
+        const actualPrvLen = bytes.length - 4 - prvStart;
+        if (actualPrvLen < 0) throw new Error('缺少CCPrvMsg或CCMsg末尾CRC32。');
+        fields[prvLenFieldIndex].desc += `；服务端按CCPrvMsg实际结构推进，本报文实际占用${actualPrvLen}字节`;
+        const innerPrvId = parsePrvMsg(bytes, fields, prvStart, actualPrvLen); r.offset = prvStart + actualPrvLen;
+        fields[prvWrapperIndex].desc += `；内部msg_id=${innerPrvId}`;
+        if (innerPrvId !== prvMsgId) fields[prvWrapperIndex].valid = false;
+
+        if (r.remaining() < 4) throw new Error('缺少CCMsg末尾CRC32。');
+        if (r.remaining() > 4) r.byteArray('unparsed_data', r.remaining() - 4, '子报文长度之外的额外数据');
+        const topCrcIndex = fields.length; const receivedCrc = r.u32('crc32', '整个CCMsg的CRC32');
+        const calculatedCrc = crc32(bytes.slice(0, bytes.length - 4));
+        fields[topCrcIndex].valid = receivedCrc === calculatedCrc;
+        fields[topCrcIndex].desc += `；计算值 ${toHex(calculatedCrc, 4)}`;
+        return {
+            fields, frameLen, msgNum, pubMsgId, prvMsgId,
+            pubLen, actualPubLen, prvLen, actualPrvLen,
+            crcValid: receivedCrc === calculatedCrc
+        };
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
+
+    function render(bytes, parsed) {
+        document.getElementById('summary').innerHTML = [
+            `<span class="badge">总长度：${bytes.length} B</span>`,
+            `<span class="badge">FrameLen：${parsed.frameLen}</span>`,
+            `<span class="badge">消息数：${parsed.msgNum}</span>`,
+            `<span class="badge">PubMsg：${parsed.pubMsgId}</span>`,
+            `<span class="badge">Pub长度：声明${parsed.pubLen} / 实际${parsed.actualPubLen}</span>`,
+            `<span class="badge">PrvMsg：${parsed.prvMsgId}</span>`,
+            `<span class="badge">Prv长度：声明${parsed.prvLen} / 实际${parsed.actualPrvLen}</span>`,
+            `<span class="badge ${parsed.crcValid ? 'ok' : 'bad'}">总CRC：${parsed.crcValid ? '通过' : '失败'}</span>`
+        ].join('');
+        document.getElementById('fieldBody').innerHTML = parsed.fields.map((field, index) => `
+            <tr class="${field.valid === false ? 'invalid' : ''}">
+                <td>${index + 1}</td><td class="field">${escapeHtml(field.name)}</td>
+                <td class="mono">${toHex(field.start, 2)}</td><td>${field.length}</td><td>${escapeHtml(field.type)}</td>
+                <td class="mono">${escapeHtml(bytesToHex(field.raw))}</td><td>${escapeHtml(field.value)}</td>
+                <td class="desc">${field.valid === true ? '✓ ' : field.valid === false ? '✗ ' : ''}${escapeHtml(field.desc)}</td>
+            </tr>`).join('');
+        document.getElementById('hexDump').textContent = makeHexDump(bytes);
+        document.getElementById('result').classList.remove('hidden');
+    }
+
+    function makeHexDump(bytes) {
+        const lines = [];
+        for (let offset = 0; offset < bytes.length; offset += 16) {
+            const row = bytes.slice(offset, offset + 16);
+            const hex = bytesToHex(row).padEnd(47, ' ');
+            const ascii = Array.from(row, byte => byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.').join('');
+            lines.push(`${offset.toString(16).toUpperCase().padStart(4, '0')}  ${hex}  ${ascii}`);
+        }
+        return lines.join('\n');
+    }
+
+    function pushU16(target, value) { target.push((value >>> 8) & 0xFF, value & 0xFF); }
+    function pushU32(target, value) { target.push((value >>> 24) & 0xFF, (value >>> 16) & 0xFF, (value >>> 8) & 0xFF, value & 0xFF); }
+    function setU16(target, offset, value) { target[offset] = (value >>> 8) & 0xFF; target[offset + 1] = value & 0xFF; }
+
+    function makeExample() {
+        const pub = [202, 0x20, 0x01, 26, 7, 24, 12, 0, 0, 0, 1, 0, 7, 3];
+        while (pub.length < 131) pub.push(0);
+        pushU32(pub, crc32(Uint8Array.from(pub.slice(0, 131))));
+
+        const prv = [212, 0, 0xAA, 1];
+        while (prv.length < 30) prv.push(0);
+        prv.push(0); pushU16(prv, 0); prv.push(0);
+        for (let i = 0; i < 7; i++) pushU32(prv, 0);
+        prv.push(0, 1, 1, 0, 0);
+        pushU32(prv, 0); for (let i = 0; i < 8; i++) prv.push(0); prv.push(0);
+        for (let i = 0; i < 23; i++) prv.push(0);
+        for (let i = 0; i < 18; i++) prv.push(0);
+        for (let i = 0; i < 15; i++) prv.push(0);
+        pushU32(prv, crc32(Uint8Array.from(prv)));
+
+        const msg = [0xFF, 0, 0, 0x10, 0xAA, 0x00, 0x05, 0x20, 0xAA, 0x00, 0x20];
+        pushU32(msg, 1); msg.push(2, 202); pushU16(msg, pub.length); msg.push(...pub, 212); pushU16(msg, prv.length); msg.push(...prv);
+        setU16(msg, 1, msg.length + 4 - 3); pushU32(msg, crc32(Uint8Array.from(msg)));
+        return bytesToHex(msg);
+    }
+
+    function showError(message) {
+        const error = document.getElementById('error'); error.textContent = message; error.style.display = 'block';
+        document.getElementById('result').classList.add('hidden');
+    }
+
+    document.getElementById('parseBtn').addEventListener('click', () => {
+        document.getElementById('error').style.display = 'none';
+        try { const bytes = parseHex(document.getElementById('hexInput').value); render(bytes, parseCCMsg(bytes)); }
+        catch (error) { showError(error.message); }
+    });
+    document.getElementById('exampleBtn').addEventListener('click', () => {
+        document.getElementById('hexInput').value = makeExample(); document.getElementById('parseBtn').click();
+    });
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        document.getElementById('hexInput').value = ''; document.getElementById('error').style.display = 'none'; document.getElementById('result').classList.add('hidden');
+    });
+</script>
+</body>
+</html>
