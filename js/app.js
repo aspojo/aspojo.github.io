@@ -61,6 +61,12 @@ var app = angular.module('demo', []).controller('DemoCtrl', function($scope) {
             src: 'https://github.com/aspojo/utils/mss.html',
             home: './utils/mss.html'
         },
+        {
+            name: '直播标题PNG生成器',
+            desc: '直播标题PNG生成器',
+            src: 'https://github.com/aspojo/live_rome_title_util.html',
+            home: './live_rome_title_util.html'
+        },
 
     ];
 

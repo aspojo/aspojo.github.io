@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+
+    <meta charset="UTF-8">
+    <title>直播标题PNG生成器</title>
+
+    <style>
+
+        body{
+            margin:0;
+            height:100vh;
+            display:flex;
+            font-family:"Microsoft YaHei";
+            background:#eeeeee;
+        }
+
+
+        .left{
+
+            width:360px;
+            background:white;
+            padding:20px;
+            box-sizing:border-box;
+            overflow:auto;
+
+        }
+
+
+        .right{
+
+            flex:1;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+
+        }
+
+
+        h2{
+            margin-top:0;
+        }
+
+
+        textarea{
+
+            width:100%;
+            height:160px;
+            font-size:22px;
+            padding:10px;
+            box-sizing:border-box;
+
+        }
+
+
+        label{
+
+            display:block;
+            margin-top:15px;
+
+        }
+
+
+
+        select,
+        button{
+
+            font-size:16px;
+            padding:8px;
+            margin-top:5px;
+
+        }
+
+
+
+        button{
+
+            cursor:pointer;
+            margin-right:5px;
+
+        }
+
+
+        canvas{
+
+            width:90%;
+            max-width:1080px;
+
+
+            background:
+                    linear-gradient(45deg,#ddd 25%,transparent 25%),
+                    linear-gradient(-45deg,#ddd 25%,transparent 25%),
+                    linear-gradient(45deg,transparent 75%,#ddd 75%),
+                    linear-gradient(-45deg,transparent 75%,#ddd 75%);
+
+            background-size:20px 20px;
+
+        }
+
+    </style>
+
+
+</head>
+
+
+<body>
+
+
+<div class="left">
+
+
+    <h2>
+        直播标题PNG生成器
+    </h2>
+
+
+    <label>
+        输入文字：
+    </label>
+
+
+    <textarea id="text">
+C++工程师
+探索新能源BMS
+</textarea>
+
+
+
+    <label>
+        字体大小：
+    </label>
+
+    <select id="size">
+
+        <option value="60">
+            小标题 60px
+        </option>
+
+        <option value="90" selected>
+            标准标题 90px
+        </option>
+
+        <option value="120">
+            主标题 120px
+        </option>
+
+        <option value="160">
+            强调标题 160px
+        </option>
+
+    </select>
+
+
+
+    <label>
+        文字颜色：
+    </label>
+
+    <select id="color">
+
+        <option value="#FFFFFF">
+            白色（通用）
+        </option>
+
+        <option value="#FFD700">
+            金黄色（吸睛）
+        </option>
+
+        <option value="#00E5FF">
+            科技蓝（新能源）
+        </option>
+
+        <option value="#00FF88">
+            绿色（环保）
+        </option>
+
+        <option value="#FF4444">
+            红色（重点）
+        </option>
+
+        <option value="#FF9900">
+            橙色
+        </option>
+
+    </select>
+
+
+
+
+    <label>
+        描边颜色：
+    </label>
+
+
+    <select id="stroke">
+
+        <option value="#000000">
+            黑色描边（推荐）
+        </option>
+
+        <option value="#003366">
+            深蓝科技
+        </option>
+
+        <option value="#FFFFFF">
+            白色描边
+        </option>
+
+    </select>
+
+
+
+    <label>
+        描边宽度：
+    </label>
+
+
+    <select id="strokeWidth">
+
+        <option value="4">
+            细描边
+        </option>
+
+        <option value="8" selected>
+            标准描边
+        </option>
+
+        <option value="12">
+            粗描边
+        </option>
+
+
+    </select>
+
+
+
+
+    <label>
+        文字对齐：
+    </label>
+
+
+    <select id="align">
+
+
+        <option value="center">
+            居中
+        </option>
+
+
+        <option value="left">
+            左对齐
+        </option>
+
+
+        <option value="right">
+            右对齐
+        </option>
+
+
+    </select>
+
+
+
+
+    <label>
+        字体粗细：
+    </label>
+
+
+    <select id="weight">
+
+
+        <option value="bold">
+            粗体
+        </option>
+
+
+        <option value="normal">
+            普通
+        </option>
+
+
+    </select>
+
+
+
+    <hr>
+
+
+    <h3>
+        快速风格
+    </h3>
+
+
+    <button onclick="styleBMS()">
+        新能源科技风
+    </button>
+
+
+    <button onclick="styleTalk()">
+        工程师聊天风
+    </button>
+
+
+    <button onclick="styleHot()">
+        热点标题风
+    </button>
+
+
+
+    <br><br>
+
+
+    <button onclick="downloadPNG()">
+
+        导出透明PNG
+
+    </button>
+
+
+
+</div>
+
+
+
+
+<div class="right">
+
+    <canvas id="canvas"
+            width="1080"
+            height="400">
+
+    </canvas>
+
+
+</div>
+
+
+
+<script>
+
+
+    const canvas =
+        document.getElementById("canvas");
+
+
+    const ctx =
+        canvas.getContext("2d");
+
+
+
+    function draw(){
+
+
+        ctx.clearRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+
+
+        let text =
+            document.getElementById("text").value;
+
+
+        let size =
+            Number(document.getElementById("size").value);
+
+
+
+        let color =
+            document.getElementById("color").value;
+
+
+
+        let stroke =
+            document.getElementById("stroke").value;
+
+
+
+        let strokeWidth =
+            Number(document.getElementById("strokeWidth").value);
+
+
+
+        let align =
+            document.getElementById("align").value;
+
+
+
+        let weight =
+            document.getElementById("weight").value;
+
+
+
+        ctx.font =
+            `${weight} ${size}px Microsoft YaHei`;
+
+
+
+        ctx.textBaseline="middle";
+
+        ctx.textAlign=align;
+
+
+
+        let x;
+
+
+        if(align==="center")
+        {
+            x=canvas.width/2;
+        }
+
+
+        else if(align==="left")
+        {
+            x=60;
+        }
+
+
+        else
+        {
+            x=canvas.width-60;
+        }
+
+
+
+
+        let lines =
+            text.split("\n");
+
+
+
+        let lineHeight =
+            size*1.35;
+
+
+
+        let startY =
+            canvas.height/2 -
+            (lines.length-1)
+            *
+            lineHeight/2;
+
+
+
+        lines.forEach((line,index)=>{
+
+
+            let y =
+                startY+
+                index*lineHeight;
+
+
+
+            ctx.lineWidth =
+                strokeWidth;
+
+
+            ctx.strokeStyle =
+                stroke;
+
+
+
+            ctx.strokeText(
+                line,
+                x,
+                y
+            );
+
+
+
+            ctx.fillStyle =
+                color;
+
+
+
+            ctx.fillText(
+                line,
+                x,
+                y
+            );
+
+
+
+        });
+
+
+    }
+
+
+
+
+    function downloadPNG(){
+
+
+        let a =
+            document.createElement("a");
+
+
+        a.download =
+            "直播标题.png";
+
+
+        a.href =
+            canvas.toDataURL("image/png");
+
+
+        a.click();
+
+
+    }
+
+
+
+
+    function styleBMS(){
+
+
+        text.value=
+            "C++工程师\n探索新能源BMS";
+
+
+        size.value="120";
+
+        color.value="#00E5FF";
+
+        stroke.value="#000000";
+
+        strokeWidth.value="8";
+
+        align.value="center";
+
+        draw();
+
+    }
+
+
+
+
+    function styleTalk(){
+
+
+        text.value=
+            "程序员成长\n聊聊技术未来";
+
+
+        size.value="90";
+
+        color.value="#FFFFFF";
+
+        stroke.value="#000000";
+
+        strokeWidth.value="8";
+
+        align.value="center";
+
+        draw();
+
+
+    }
+
+
+
+
+    function styleHot(){
+
+
+        text.value=
+            "储能行业机会\n程序员如何进入";
+
+
+        size.value="120";
+
+        color.value="#FFD700";
+
+        stroke.value="#000000";
+
+        strokeWidth.value="12";
+
+        align.value="center";
+
+        draw();
+
+
+    }
+
+
+
+
+    document
+        .querySelectorAll(
+            "textarea,select"
+        )
+        .forEach(
+            e=>{
+                e.oninput=draw;
+            }
+        );
+
+
+
+    draw();
+
+
+</script>
+
+
+</body>
+
+</html>
