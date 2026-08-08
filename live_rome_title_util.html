@@ -76,16 +76,15 @@
         button{
 
             cursor:pointer;
-            margin-right:5px;
 
         }
 
 
+
         canvas{
 
-            width:90%;
-            max-width:1080px;
-
+            max-width:90%;
+            max-height:90%;
 
             background:
                     linear-gradient(45deg,#ddd 25%,transparent 25%),
@@ -98,7 +97,6 @@
         }
 
     </style>
-
 
 </head>
 
@@ -126,162 +124,191 @@ C++工程师
 
 
 
+
     <label>
-        字体大小：
+        图片高度：
+
+        <select id="height">
+
+            <option value="200">
+                200 px（窄标题）
+            </option>
+
+            <option value="300">
+                300 px（推荐）
+            </option>
+
+            <option value="400" selected>
+                400 px（标准）
+            </option>
+
+            <option value="600">
+                600 px（大标题）
+            </option>
+
+            <option value="800">
+                800 px
+            </option>
+
+        </select>
+
     </label>
 
-    <select id="size">
 
-        <option value="60">
-            小标题 60px
-        </option>
 
-        <option value="90" selected>
-            标准标题 90px
-        </option>
+    <label>
+        字体大小：
 
-        <option value="120">
-            主标题 120px
-        </option>
+        <select id="size">
 
-        <option value="160">
-            强调标题 160px
-        </option>
+            <option value="60">
+                小标题 60px
+            </option>
 
-    </select>
+            <option value="90" selected>
+                标准标题 90px
+            </option>
+
+            <option value="120">
+                主标题 120px
+            </option>
+
+            <option value="160">
+                强调标题 160px
+            </option>
+
+        </select>
+
+    </label>
+
 
 
 
     <label>
         文字颜色：
+
+        <select id="color">
+
+            <option value="#FFFFFF">
+                白色
+            </option>
+
+            <option value="#FFD700">
+                金黄色
+            </option>
+
+            <option value="#00E5FF">
+                科技蓝
+            </option>
+
+            <option value="#00FF88">
+                绿色
+            </option>
+
+            <option value="#FF4444">
+                红色
+            </option>
+
+            <option value="#FF9900">
+                橙色
+            </option>
+
+        </select>
+
     </label>
-
-    <select id="color">
-
-        <option value="#FFFFFF">
-            白色（通用）
-        </option>
-
-        <option value="#FFD700">
-            金黄色（吸睛）
-        </option>
-
-        <option value="#00E5FF">
-            科技蓝（新能源）
-        </option>
-
-        <option value="#00FF88">
-            绿色（环保）
-        </option>
-
-        <option value="#FF4444">
-            红色（重点）
-        </option>
-
-        <option value="#FF9900">
-            橙色
-        </option>
-
-    </select>
 
 
 
 
     <label>
         描边颜色：
+
+        <select id="stroke">
+
+            <option value="#000000">
+                黑色描边（推荐）
+            </option>
+
+            <option value="#003366">
+                深蓝科技
+            </option>
+
+            <option value="#FFFFFF">
+                白色描边
+            </option>
+
+        </select>
+
     </label>
 
-
-    <select id="stroke">
-
-        <option value="#000000">
-            黑色描边（推荐）
-        </option>
-
-        <option value="#003366">
-            深蓝科技
-        </option>
-
-        <option value="#FFFFFF">
-            白色描边
-        </option>
-
-    </select>
 
 
 
     <label>
         描边宽度：
+
+        <select id="strokeWidth">
+
+            <option value="4">
+                4px
+            </option>
+
+            <option value="8" selected>
+                8px
+            </option>
+
+            <option value="12">
+                12px
+            </option>
+
+        </select>
+
     </label>
-
-
-    <select id="strokeWidth">
-
-        <option value="4">
-            细描边
-        </option>
-
-        <option value="8" selected>
-            标准描边
-        </option>
-
-        <option value="12">
-            粗描边
-        </option>
-
-
-    </select>
 
 
 
 
     <label>
         文字对齐：
+
+        <select id="align">
+
+            <option value="center">
+                居中
+            </option>
+
+            <option value="left">
+                左对齐
+            </option>
+
+            <option value="right">
+                右对齐
+            </option>
+
+        </select>
+
     </label>
-
-
-    <select id="align">
-
-
-        <option value="center">
-            居中
-        </option>
-
-
-        <option value="left">
-            左对齐
-        </option>
-
-
-        <option value="right">
-            右对齐
-        </option>
-
-
-    </select>
 
 
 
 
     <label>
         字体粗细：
+
+        <select id="weight">
+
+            <option value="bold">
+                粗体
+            </option>
+
+            <option value="normal">
+                普通
+            </option>
+
+        </select>
+
     </label>
 
-
-    <select id="weight">
-
-
-        <option value="bold">
-            粗体
-        </option>
-
-
-        <option value="normal">
-            普通
-        </option>
-
-
-    </select>
 
 
 
@@ -308,19 +335,16 @@ C++工程师
     </button>
 
 
-
     <br><br>
 
 
     <button onclick="downloadPNG()">
-
         导出透明PNG
-
     </button>
 
 
-
 </div>
+
 
 
 
@@ -330,11 +354,11 @@ C++工程师
     <canvas id="canvas"
             width="1080"
             height="400">
-
     </canvas>
 
 
 </div>
+
 
 
 
@@ -353,6 +377,18 @@ C++工程师
     function draw(){
 
 
+
+        let h =
+            Number(
+                document.getElementById("height").value
+            );
+
+
+
+        canvas.height=h;
+
+
+
         ctx.clearRect(
             0,
             0,
@@ -366,8 +402,11 @@ C++工程师
             document.getElementById("text").value;
 
 
+
         let size =
-            Number(document.getElementById("size").value);
+            Number(
+                document.getElementById("size").value
+            );
 
 
 
@@ -382,7 +421,9 @@ C++工程师
 
 
         let strokeWidth =
-            Number(document.getElementById("strokeWidth").value);
+            Number(
+                document.getElementById("strokeWidth").value
+            );
 
 
 
@@ -403,6 +444,7 @@ C++工程师
 
         ctx.textBaseline="middle";
 
+
         ctx.textAlign=align;
 
 
@@ -410,17 +452,16 @@ C++工程师
         let x;
 
 
+
         if(align==="center")
         {
             x=canvas.width/2;
         }
 
-
         else if(align==="left")
         {
             x=60;
         }
-
 
         else
         {
@@ -441,53 +482,54 @@ C++工程师
 
 
         let startY =
-            canvas.height/2 -
+            h/2 -
             (lines.length-1)
             *
             lineHeight/2;
 
 
 
-        lines.forEach((line,index)=>{
+
+        lines.forEach(
+            (line,index)=>{
 
 
-            let y =
-                startY+
-                index*lineHeight;
-
-
-
-            ctx.lineWidth =
-                strokeWidth;
-
-
-            ctx.strokeStyle =
-                stroke;
+                let y =
+                    startY+
+                    index*lineHeight;
 
 
 
-            ctx.strokeText(
-                line,
-                x,
-                y
-            );
+                ctx.lineWidth=
+                    strokeWidth;
+
+
+                ctx.strokeStyle=
+                    stroke;
+
+
+                ctx.strokeText(
+                    line,
+                    x,
+                    y
+                );
 
 
 
-            ctx.fillStyle =
-                color;
+                ctx.fillStyle=
+                    color;
+
+
+                ctx.fillText(
+                    line,
+                    x,
+                    y
+                );
 
 
 
-            ctx.fillText(
-                line,
-                x,
-                y
-            );
+            });
 
-
-
-        });
 
 
     }
@@ -525,6 +567,8 @@ C++工程师
             "C++工程师\n探索新能源BMS";
 
 
+        height.value="300";
+
         size.value="120";
 
         color.value="#00E5FF";
@@ -532,8 +576,6 @@ C++工程师
         stroke.value="#000000";
 
         strokeWidth.value="8";
-
-        align.value="center";
 
         draw();
 
@@ -549,6 +591,8 @@ C++工程师
             "程序员成长\n聊聊技术未来";
 
 
+        height.value="300";
+
         size.value="90";
 
         color.value="#FFFFFF";
@@ -557,10 +601,7 @@ C++工程师
 
         strokeWidth.value="8";
 
-        align.value="center";
-
         draw();
-
 
     }
 
@@ -574,6 +615,8 @@ C++工程师
             "储能行业机会\n程序员如何进入";
 
 
+        height.value="400";
+
         size.value="120";
 
         color.value="#FFD700";
@@ -582,10 +625,7 @@ C++工程师
 
         strokeWidth.value="12";
 
-        align.value="center";
-
         draw();
-
 
     }
 
