@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS 时刻表及备车报文解析器 (0x91)</title>
+    <style>
+        :root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif; }
+        body { margin: 0; background: #f3f6fa; color: #243447; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        h1 { margin: 0 0 8px; color: #164a7b; }
+        h2 { margin: 0 0 14px; color: #164a7b; font-size: 20px; }
+        .subtitle { margin: 0 0 20px; color: #617284; }
+        .panel { background: #fff; border: 1px solid #d8e1ea; border-radius: 8px; padding: 18px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(30, 58, 85, .06); }
+        label { display: block; margin: 10px 0 6px; font-weight: 600; }
+        textarea { width: 100%; min-height: 150px; box-sizing: border-box; resize: vertical; border: 1px solid #b9c6d3; border-radius: 5px; padding: 10px; font: 13px/1.5 Consolas, "Courier New", monospace; }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        button { border: 0; border-radius: 5px; padding: 9px 15px; color: #fff; background: #1769aa; cursor: pointer; font-size: 14px; }
+        button.secondary { background: #607d8b; }
+        button:hover { filter: brightness(.93); }
+        input[type=file] { display: block; margin-top: 5px; }
+        .drop-zone { border: 1px dashed #9db5c9; border-radius: 5px; padding: 12px; background: #f8fbfd; color: #526575; transition: background .15s, border-color .15s; }
+        .drop-zone.dragover { border-color: #1769aa; background: #eaf4fb; }
+        .status { margin-top: 12px; padding: 10px; border-radius: 5px; background: #eef3f7; color: #526575; }
+        .status.ok { background: #e7f5ec; color: #176b38; }
+        .status.error { background: #fdecec; color: #a12626; }
+        .frame-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .frame-list button { background: #e8f0f7; color: #164a7b; border: 1px solid #b9cde0; }
+        .frame-list button.active { background: #1769aa; color: white; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+        .field { border: 1px solid #dce5ed; border-radius: 5px; padding: 8px 10px; background: #fbfcfd; min-width: 0; }
+        .field strong { display: block; color: #526575; font-size: 12px; margin-bottom: 3px; }
+        .field span { font-family: Consolas, "Courier New", monospace; overflow-wrap: anywhere; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+        th, td { border: 1px solid #d7e0e8; padding: 7px 8px; text-align: left; vertical-align: top; }
+        th { background: #edf3f8; color: #38546d; }
+        .records { overflow-x: auto; }
+        .raw { white-space: pre-wrap; word-break: break-all; background: #16222d; color: #d8e6f2; padding: 12px; border-radius: 5px; font: 12px/1.55 Consolas, monospace; max-height: 280px; overflow: auto; }
+        .hint { color: #687b8b; font-size: 13px; line-height: 1.6; }
+        .hidden { display: none; }
+        @media (max-width: 700px) { .container { padding: 12px; } .panel { padding: 13px; } h1 { font-size: 24px; } }
+    </style>
+</head>
+<body>
+<main class="container">
+    <h1>ATS 时刻表及备车报文解析器 <small>(0x91)</small></h1>
+    <p class="subtitle">小端序 Gen2 帧：支持单帧十六进制输入，或从 ats_agent 日志中提取 0x91 报文（兼容日志截取片段）。</p>
+
+    <section class="panel">
+        <h2>输入报文</h2>
+        <label for="hexInput">十六进制报文或日志内容</label>
+        <textarea id="hexInput" placeholder="AA 50 16 91 ... 55 xx xx xx xx，或直接粘贴日志内容"></textarea>
+        <div class="actions">
+            <button id="parseButton" type="button">解析输入内容</button>
+            <button id="clearButton" class="secondary" type="button">清空</button>
+        </div>
+        <label for="logFile">上传日志文本（可选）</label>
+        <div id="dropZone" class="drop-zone">将日志文件拖放到此处，或点击选择文件。
+            <input id="logFile" type="file" accept=".log,.txt" />
+        </div>
+        <div class="actions">
+            <button id="parseLogButton" type="button">提取并解析日志中的 0x91</button>
+        </div>
+        <div id="status" class="status">尚未解析。</div>
+        <div id="frameList" class="frame-list"></div>
+    </section>
+
+    <section id="resultPanel" class="panel hidden">
+        <h2>帧字段</h2>
+        <div id="frameFields" class="grid"></div>
+        <h2 style="margin-top:20px">内部数据（按已知类型解析）</h2>
+        <div id="records" class="records"></div>
+        <h2 style="margin-top:20px">原始数据</h2>
+        <div id="rawData" class="raw"></div>
+    </section>
+
+    <section class="panel hint">
+        <strong>字段定义：</strong> LEN 为从 MSG_ID 到 CRC 的字节数，长度字段和 CRC 均为小端序；DATA 没有独立长度字段，范围是 nDataType 之后至帧尾 0x55 之前。内部类型 0x0851=SchTrain、0x0852=SchTrip、0x0853=SchLeg、0x086A=StandbyTrain；fileType 9/15/16 分别表示备车、出库计划、入库计划。日志中的超长报文可能只保留前 2048 字节，此时字段仍可查看，但 CRC 会标记为无法校验。
+    </section>
+</main>
+
+<script>
+(function () {
+    "use strict";
+
+    var selectedFrames = [];
+    var selectedIndex = 0;
+    var status = document.getElementById("status");
+    var frameList = document.getElementById("frameList");
+    var resultPanel = document.getElementById("resultPanel");
+
+    function hexBytes(text) {
+        var matches = (text || "").match(/[0-9a-fA-F]{2}/g) || [];
+        var bytes = [];
+        for (var i = 0; i < matches.length; i++) bytes.push(parseInt(matches[i], 16));
+        return bytes;
+    }
+
+    function hex(bytes) {
+        var out = [];
+        for (var i = 0; i < bytes.length; i++) out.push((bytes[i] < 16 ? "0" : "") + bytes[i].toString(16).toUpperCase());
+        return out.join(" ");
+    }
+
+    function u16(bytes, offset) { return bytes[offset] | (bytes[offset + 1] << 8); }
+    function u32(bytes, offset) { return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0; }
+    function be16(bytes, offset) { return (bytes[offset] << 8) | bytes[offset + 1]; }
+    function be32(bytes, offset) { return ((bytes[offset] * 0x1000000) + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]) >>> 0; }
+    function ascii(bytes) {
+        var end = bytes.length;
+        while (end && bytes[end - 1] === 0) end--;
+        var text = "";
+        for (var i = 0; i < end; i++) text += bytes[i] >= 32 && bytes[i] < 127 ? String.fromCharCode(bytes[i]) : "\\u" + ("0000" + bytes[i].toString(16)).slice(-4);
+        return text.trim();
+    }
+    function crc32(bytes, offset, length) {
+        var crc = 0xFFFFFFFF;
+        for (var i = offset; i < offset + length; i++) {
+            crc ^= bytes[i] << 24;
+            for (var bit = 0; bit < 8; bit++) crc = (crc & 0x80000000) ? (((crc << 1) ^ 0x04C11DB7) >>> 0) : ((crc << 1) >>> 0);
+        }
+        return crc >>> 0;
+    }
+    function crcValue(bytes, offset) { return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0; }
+    function hex32(value) { return "0x" + ("00000000" + value.toString(16).toUpperCase()).slice(-8); }
+
+    function parseFrame(input, allowPartial) {
+        if (input.length < 42) throw new Error("帧长度不足，至少需要 42 字节");
+        if (input[0] !== 0xAA) throw new Error("帧头不是 0xAA");
+        var declared = u16(input, 1), total = declared + 3;
+        var partial = total !== input.length;
+        if (partial && !allowPartial) throw new Error("LEN 声明 " + total + " 字节，实际输入 " + input.length + " 字节");
+        if (input[3] !== 0x91) throw new Error("MSG_ID 不是 0x91");
+        var p = 4, timestamp = input.slice(p, p + 6); p += 6;
+        var sn = u32(input, p); p += 4;
+        var fileType = input[p++], dateLength = u16(input, p); p += 2;
+        if (dateLength !== 8) throw new Error("date_len 必须为 8，实际为 " + dateLength);
+        var contentEnd = partial ? input.length : total - 5;
+        if (p + dateLength > contentEnd) throw new Error("date 字段越界");
+        var date = input.slice(p, p + dateLength); p += dateLength;
+        var nameLength = u16(input, p); p += 2;
+        if (p + nameLength > contentEnd) throw new Error("fileName 字段越界");
+        var fileName = input.slice(p, p + nameLength); p += nameLength;
+        if (p + 10 > contentEnd) throw new Error("固定字段不完整");
+        var count = u32(input, p); p += 4;
+        var startIndex = u32(input, p); p += 4;
+        var dataType = u16(input, p); p += 2;
+        if (!partial && input[total - 5] !== 0x55) throw new Error("帧尾不是 0x55");
+        var data = input.slice(p, contentEnd), crcOffset = total - 4;
+        var computed = partial ? null : crc32(input, 1, total - 5), actual = partial ? null : crcValue(input, crcOffset);
+        return { bytes: input, declared: declared, timestamp: timestamp, sn: sn, fileType: fileType, date: date, fileName: fileName,
+            count: count, startIndex: startIndex, dataType: dataType, data: data, crc: actual, computedCrc: computed, crcValid: partial ? null : actual === computed, partial: partial };
+    }
+
+    function records(packet) {
+        var b = packet.data, p = 0, result = [], type = packet.dataType;
+        function need(n) { if (p + n > b.length) throw new Error("内部数据不足：需要 " + n + " 字节"); }
+        function r8() { need(1); return b[p++]; }
+        function r32() { need(4); var v = be32(b, p); p += 4; return v; }
+        function r16() { need(2); var v = be16(b, p); p += 2; return v; }
+        function rBytes(n) { need(n); var v = b.slice(p, p + n); p += n; return v; }
+        function rComment() { var begin = p; while (p + 1 < b.length && (b[p] !== 0 || b[p + 1] !== 0)) p++; need(2); p += 2; return ascii(b.slice(begin, p - 2)); }
+        function rTail(row, reserveLength) { row.Comment = rComment(); row.DepotStatus = r8(); row.CtrlAreaID = r32(); row.Reserve = hex(rBytes(reserveLength || 4)); }
+        if (packet.fileType === 9 || type === 0x086A) {
+            var size = 8;
+            while (p + size <= b.length) result.push(type === 0x0851 ? { TID: be32(rBytes(4), 0), PVID: be32(rBytes(4), 0) } : { PVID: be32(rBytes(4), 0), TrackID: be32(rBytes(4), 0) });
+        } else if (packet.fileType === 15) {
+            while (p + 2 <= b.length) {
+                var onlineType = r16();
+                if (onlineType === 0x086A) {
+                    need(8);
+                    result.push({ DataType: hex32(onlineType), PVID: r32(), TrackID: r32() });
+                    continue;
+                }
+                if (p + 41 > b.length) throw new Error("出库计划记录不完整");
+                if (onlineType !== 0x0865) throw new Error("出库计划记录类型应为 0x0865，实际为 " + hex32(onlineType));
+                var online = { DataType: hex32(onlineType), PVID: r32(), DriverID: r32(), OutTID: r32(), OutTripID: r32(), OutDID: r32(), OutDepTrackID: r32(), OutTime: r32(), OutIsPlanOnline: r8(), IsAutoWakeup: r8(), IsTrolley: r8(), IsWheelFlangeLubrication: r8(), PlanStandbyPVID: r32(), StandbyPVID: r32(), CrossoverTrackCnt: r8(), CrossoverTrackID: [] };
+                for (var oi = 0; oi < online.CrossoverTrackCnt; oi++) online.CrossoverTrackID.push(r32());
+                rTail(online, 3); online.OutTripID = hex32(online.OutTripID); online.OutDID = hex32(online.OutDID); online.OutDepTrackID = hex32(online.OutDepTrackID); online.PlanStandbyPVID = hex32(online.PlanStandbyPVID); online.CtrlAreaID = hex32(online.CtrlAreaID); result.push(online);
+            }
+        } else if (packet.fileType === 16) {
+            while (p + 35 <= b.length) {
+                var inboundType = r16();
+                if (inboundType !== 0x0866) throw new Error("入库计划记录类型应为 0x0866，实际为 " + hex32(inboundType));
+                var inbound = { DataType: hex32(inboundType), PVID: r32(), InTID: r32(), InTripID: r32(), InDID: r32(), InDepTrackID: r32(), InTime: r32(), InIsPlanOnline: r8(), IsSweep: r8(), WashingMachineID: r32(), WashingMode: r8(), IsAutoSleep: r8(), CrossoverTrackCnt: r8(), CrossoverTrackID: [] };
+                for (var ii = 0; ii < inbound.CrossoverTrackCnt; ii++) inbound.CrossoverTrackID.push(r32());
+                rTail(inbound); inbound.InTripID = hex32(inbound.InTripID); inbound.InDepTrackID = hex32(inbound.InDepTrackID); inbound.CtrlAreaID = hex32(inbound.CtrlAreaID); result.push(inbound);
+            }
+        } else if (type === 0x0852) {
+            while (p + 24 <= b.length) result.push({ ID: r32(), OwnerID: r32(), TripID: r32(), DID: r32(), Type: r32(), Direction: r32() });
+        } else if (type === 0x0853) {
+            while (p + 68 <= b.length) {
+                var row = { ID: r32(), OwnerID: r32(), TrackCount: r32(), TrackID: [r32(), r32(), r32(), r32()], ArrivalTime: r32(), DepatureTime: r32(), Direction: r32(), Type: r32(), Flag: r32(), CrossTripID: r32(), Passenger: r32(), Reserve: [] };
+                for (var i = 0; i < 12; i++) row.Reserve.push(r8());
+                result.push(row);
+            }
+        } else if (type === 0) {
+            var markers = [{ code: 0x0851, name: "SchTrain" }, { code: 0x0852, name: "SchTrip" }, { code: 0x0853, name: "SchLeg" }, { code: 0x086A, name: "StandbyTrain" }];
+            for (var m = 0; m < markers.length; m++) {
+                var marker = markers[m], pattern = [(marker.code >>> 8) & 255, marker.code & 255], occurrences = 0;
+                for (var at = 0; at + 1 < b.length; at++) if (b[at] === pattern[0] && b[at + 1] === pattern[1]) occurrences++;
+                if (occurrences) result.push({ dataType: hex32(marker.code), name: marker.name, occurrences: occurrences, note: "混合正文中的类型标记" });
+            }
+            if (!result.length) result.push({ rawData: hex(b), note: "nDataType=0，未识别内部类型标记" });
+        } else {
+            result.push({ rawData: hex(b), note: "未知 nDataType，保留原始数据" });
+        }
+        if (p !== b.length && type !== 0 && packet.fileType !== 15 && packet.fileType !== 16) throw new Error("内部数据剩余 " + (b.length - p) + " 字节，记录边界可能不匹配");
+        return result;
+    }
+
+    function fileTypeName(value) { return ({ 9: "备车计划", 15: "出库计划", 16: "入库计划" })[value] || "未知"; }
+    function dataTypeName(value) { return ({ 0: "混合/时刻表正文", 0x0851: "SchTrain", 0x0852: "SchTrip", 0x0853: "SchLeg", 0x086A: "StandbyTrain" })[value] || "未知"; }
+    function addField(parent, name, value) { var div = document.createElement("div"), label = document.createElement("strong"), content = document.createElement("span"); div.className = "field"; label.textContent = name; content.textContent = String(value); div.appendChild(label); div.appendChild(content); parent.appendChild(div); }
+
+    function render(packet) {
+        selectedIndex = Math.max(0, selectedIndex);
+        document.getElementById("frameFields").innerHTML = "";
+        var fields = document.getElementById("frameFields");
+        addField(fields, "HEADER", "0xAA"); addField(fields, "LEN", packet.declared + " (" + packet.bytes.length + " bytes total)"); addField(fields, "MSG_ID", "0x91");
+        addField(fields, "时间戳", hex(packet.timestamp)); addField(fields, "SN", packet.sn); addField(fields, "fileType", packet.fileType + " (" + fileTypeName(packet.fileType) + ")");
+        addField(fields, "date", ascii(packet.date) || "(空)"); addField(fields, "fileName", ascii(packet.fileName) || "(空)"); addField(fields, "count", packet.count); addField(fields, "startIndex", packet.startIndex);
+        addField(fields, "nDataType", hex32(packet.dataType) + " (" + dataTypeName(packet.dataType) + ")"); addField(fields, "DATA 长度", packet.data.length + " bytes");
+        addField(fields, "CRC", packet.partial ? "日志未捕获（报文声明 " + (packet.declared + 3) + " 字节）" : hex32(packet.crc));
+        addField(fields, "CRC 计算", packet.partial ? "无法校验截取片段" : hex32(packet.computedCrc) + (packet.crcValid ? " (匹配)" : " (不匹配)"));
+        var holder = document.getElementById("records"), rows;
+        try { rows = records(packet); } catch (e) { holder.innerHTML = "<div class=\"status error\">内部数据解析失败：" + e.message + "</div>"; rows = []; }
+        if (rows.length) { var table = document.createElement("table"), keys = Object.keys(rows[0]); table.innerHTML = "<thead><tr>" + keys.map(function (k) { return "<th>" + k + "</th>"; }).join("") + "</tr></thead>"; var body = document.createElement("tbody"); rows.forEach(function (row) { var tr = document.createElement("tr"); keys.forEach(function (k) { var td = document.createElement("td"); td.textContent = Array.isArray(row[k]) ? JSON.stringify(row[k]) : row[k]; tr.appendChild(td); }); body.appendChild(tr); }); table.appendChild(body); holder.innerHTML = ""; holder.appendChild(table); }
+        document.getElementById("rawData").textContent = hex(packet.data);
+        resultPanel.classList.remove("hidden");
+    }
+
+    function showFrames(frames) {
+        selectedFrames = frames; selectedIndex = 0; frameList.innerHTML = "";
+        if (!frames.length) throw new Error("未找到 0x91 报文");
+        frames.forEach(function (entry, index) { var b = document.createElement("button"), bytes = entry.bytes || entry; b.type = "button"; b.textContent = "帧 " + (index + 1) + " (" + bytes.length + " bytes" + (entry.partial ? ", 截取" : "") + ")"; b.onclick = function () { selectedIndex = index; render(parseFrame(selectedFrames[index].bytes || selectedFrames[index], !!selectedFrames[index].partial)); updateFrameButtons(); }; frameList.appendChild(b); });
+        updateFrameButtons(); render(parseFrame(frames[0].bytes || frames[0], !!frames[0].partial));
+    }
+    function updateFrameButtons() { Array.prototype.forEach.call(frameList.children, function (button, index) { button.classList.toggle("active", index === selectedIndex); }); }
+    function extractFrames(bytes) {
+        var frames = [], p = 0;
+        while (p + 4 <= bytes.length) { if (bytes[p] !== 0xAA || bytes[p + 3] !== 0x91) { p++; continue; } var total = u16(bytes, p + 1) + 3; if (total < 42 || p + total > bytes.length) { p++; continue; } if (bytes[p + total - 5] === 0x55) { frames.push(bytes.slice(p, p + total)); p += total; } else p++; }
+        return frames;
+    }
+    function parseLogText(text) { var lines = text.split(/\r?\n/), frames = [], start = /\[\s*(\d+)\s+Bytes bin\](.*)$/i, bare = /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+91\b/i; lines.forEach(function (line) { var m = line.match(start), source = m ? m[2] : null; if (!source) { var at = line.search(bare); if (at < 0) return; source = line.slice(at); } var bytes = hexBytes(source); if (bytes.length >= 4 && bytes[0] === 0xAA && bytes[3] === 0x91) frames.push({ bytes: bytes, partial: u16(bytes, 1) + 3 !== bytes.length }); }); showFrames(frames); status.className = "status ok"; status.textContent = "日志提取成功：找到 " + frames.length + " 条 0x91 报文（其中 " + frames.filter(function (f) { return !f.partial; }).length + " 条完整，" + frames.filter(function (f) { return f.partial; }).length + " 条为日志截取片段）。"; }
+    function readLogFile(file) { if (!file) { status.className = "status error"; status.textContent = "请先选择日志文件。"; return; } var reader = new FileReader(); reader.onload = function (event) { try { parseLogText(event.target.result); } catch (e) { status.className = "status error"; status.textContent = "日志解析失败：" + e.message; resultPanel.classList.add("hidden"); frameList.innerHTML = ""; } }; reader.readAsText(file); }
+    function parseHex() { var text = document.getElementById("hexInput").value; try { if (/\[\s*\d+\s+Bytes bin\]/i.test(text) || /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+91\b/i.test(text)) { parseLogText(text); return; } var bytes = hexBytes(text); showFrames([bytes]); status.className = "status ok"; status.textContent = "解析成功。"; } catch (e) { status.className = "status error"; status.textContent = "解析失败：" + e.message; resultPanel.classList.add("hidden"); frameList.innerHTML = ""; } }
+    function parseLog() { readLogFile(document.getElementById("logFile").files[0]); }
+    document.getElementById("parseButton").onclick = parseHex;
+    document.getElementById("parseLogButton").onclick = parseLog;
+    document.getElementById("logFile").onchange = parseLog;
+    var dropZone = document.getElementById("dropZone");
+    dropZone.ondragover = function (event) { event.preventDefault(); dropZone.classList.add("dragover"); };
+    dropZone.ondragleave = function () { dropZone.classList.remove("dragover"); };
+    dropZone.ondrop = function (event) { event.preventDefault(); dropZone.classList.remove("dragover"); readLogFile(event.dataTransfer.files[0]); };
+    document.getElementById("clearButton").onclick = function () { document.getElementById("hexInput").value = ""; status.className = "status"; status.textContent = "尚未解析。"; frameList.innerHTML = ""; resultPanel.classList.add("hidden"); };
+}());
+</script>
+</body>
+</html>
