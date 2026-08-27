@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SDM=>BiIOM全体报警和设备状态报文</title>
     <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
         body {
             font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
             margin: 0;
@@ -44,6 +47,74 @@
             box-shadow: 0 0 8px rgba(52, 152, 219, 0.3);
             outline: none;
         }
+        .input-label {
+            display: block;
+            margin: 0 0 8px;
+            font-weight: 600;
+            color: #34495e;
+        }
+        .input-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .input-actions button {
+            padding: 11px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+            border: 0;
+            border-radius: 7px;
+            cursor: pointer;
+        }
+        .input-actions .secondary {
+            background-color: #7f8c8d;
+            color: white;
+        }
+        .drop-zone {
+            margin-top: 14px;
+            padding: 13px 15px;
+            border: 1px dashed #9db5c9;
+            border-radius: 7px;
+            background: #f8fbfd;
+            color: #526575;
+            transition: background .15s, border-color .15s;
+        }
+        .drop-zone.dragover {
+            border-color: #3498db;
+            background: #eaf4fb;
+        }
+        .drop-zone input[type=file] {
+            display: block;
+            margin-top: 8px;
+            max-width: 100%;
+        }
+        .input-status {
+            margin-top: 12px;
+            padding: 9px 11px;
+            border-radius: 6px;
+            background: #eef3f7;
+            color: #526575;
+            font-size: .9rem;
+        }
+        .input-status.ok { background: #e7f5ec; color: #176b38; }
+        .input-status.error { background: #fdecec; color: #a12626; }
+        .frame-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .frame-list button {
+            padding: 7px 11px;
+            border: 1px solid #b9cde0;
+            border-radius: 5px;
+            background: #e8f0f7;
+            color: #164a7b;
+            cursor: pointer;
+        }
+        .frame-list button.active { background: #1769aa; color: white; }
+        .hidden { display: none !important; }
         #parseButton {
             padding: 12px 30px;
             font-size: 1rem;
@@ -54,6 +125,45 @@
             border-radius: 8px;
             cursor: pointer;
             transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        .config-section {
+            margin: 0 0 24px;
+            padding: 16px 20px;
+            background-color: #f8f9fa;
+            border: 1px dashed #b8c7d1;
+            border-radius: 8px;
+        }
+        .config-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        #configFile {
+            max-width: 100%;
+        }
+        #loadConfigButton {
+            padding: 9px 18px;
+            font-size: 0.95rem;
+            background-color: #5b6b7a;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        #loadConfigButton:hover {
+            background-color: #465563;
+        }
+        #configStatus {
+            margin-top: 10px;
+            color: #5f6b76;
+            font-size: 0.9rem;
+        }
+        .config-ok {
+            color: #218739;
+        }
+        .config-error {
+            color: #c0392b;
         }
         #parseButton:hover {
             background-color: #2980b9;
@@ -68,20 +178,103 @@
             font-size: 0.95rem;
             line-height: 1.6;
         }
-        .split-section {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        .split-section > div {
-            flex: 1;
-            min-width: 300px;
-            padding: 20px;
+        .data-section {
+            margin-top: 20px;
             background-color: #f8f9fa;
-            border-radius: 8px;
             border: 1px solid #e0e0e0;
-            max-height: 500px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .data-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px 0;
+            border-bottom: 1px solid #d9e0e5;
+            background-color: #eef2f5;
+        }
+        .data-tab {
+            padding: 10px 18px;
+            border: 0;
+            border-bottom: 3px solid transparent;
+            background: transparent;
+            color: #5c6b78;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .data-tab:hover { color: #2478a9; }
+        .data-tab.active {
+            color: #2478a9;
+            border-bottom-color: #3498db;
+        }
+        .data-panel { display: none; padding: 16px; }
+        .data-panel.active { display: block; }
+        .data-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .view-mode {
+            display: inline-flex;
+            border: 1px solid #cbd5dc;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .view-mode button {
+            padding: 7px 12px;
+            border: 0;
+            border-right: 1px solid #cbd5dc;
+            background: white;
+            color: #56636e;
+            cursor: pointer;
+        }
+        .view-mode button:last-child { border-right: 0; }
+        .view-mode button.active { background: #3498db; color: white; }
+        .data-search {
+            flex: 1 1 260px;
+            min-width: 180px;
+            padding: 8px 10px;
+            border: 1px solid #cbd5dc;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .data-summary {
+            margin-left: auto;
+            color: #667580;
+            font-size: 0.85rem;
+        }
+        .data-table-wrap {
+            max-height: 560px;
             overflow-y: auto;
+            overflow-x: hidden;
+            border: 1px solid #d9e0e5;
+            background: white;
+        }
+        .data-table { table-layout: fixed; margin-top: 0; }
+        .data-table th, .data-table td {
+            padding: 9px 10px;
+            vertical-align: top;
+        }
+        .data-table th:nth-child(1) { width: 90px; }
+        .data-table th:nth-child(2) { width: 100px; }
+        .data-table th:nth-child(3) { width: 90px; }
+        .data-table th:nth-child(4) { width: 80px; }
+        .data-table td:nth-child(5) {
+            text-align: left;
+            word-break: break-word;
+            white-space: normal;
+        }
+        .data-table .bit-value { font-weight: 700; }
+        .data-table .bit-value.active {
+            color: #fff;
+            background-color: #c0392b;
+        }
+        .data-table .empty-row td {
+            padding: 24px;
+            text-align: center;
+            color: #71808c;
         }
         h3 {
             color: #34495e;
@@ -125,14 +318,32 @@
                 padding: 20px;
             }
             h2 {
-                font-size: 1.5rem;
+                font-size: 1.35rem;
+                word-break: break-all;
             }
             #parseButton {
                 width: 100%;
                 padding: 12px;
             }
-            .split-section {
-                flex-direction: column;
+            .input-actions button { flex: 1 1 140px; }
+            .data-tabs {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+            .data-tab {
+                flex: 1;
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+            .data-panel { padding: 10px; }
+            .data-summary {
+                width: 100%;
+                margin-left: 0;
+            }
+            .config-row input,
+            #loadConfigButton {
+                width: 100%;
+                min-width: 0;
             }
         }
     </style>
@@ -141,75 +352,502 @@
 <div class="container">
     <div class="input-section">
         <h2>SDM=>BiIOM全体报警和设备状态报文</h2>
-        <textarea id="hexInput" rows="4" placeholder="请输入十六进制字符串（例如：AA00124020230715123000000001000000020001010001010155ABCD1234）"></textarea>
-        <br>
-        <button id="parseButton">解析</button>
+        <div class="config-section">
+            <strong>大排队位定义（可选）</strong>
+            <div class="config-row">
+                <input type="file" id="configFile" multiple accept=".xml,.json,.txt,.csv,.tsv,application/xml,text/xml,application/json,text/plain,text/csv">
+                <button type="button" id="loadConfigButton">加载配置</button>
+            </div>
+            <small>支持 cbi_agent 的 XML 配置（可多选：StateAlarmIndexTable、BoardAlarmsIndexTable、CommAlarmsIndexTable、IOAlarmsIndexTable、CSMStatusIndexTable），也支持 JSON 或按行填写：alarm,位序号,含义 / state,位序号,含义。</small>
+            <div id="configStatus">未加载配置文件，解析时仅显示原始位值。</div>
+        </div>
+        <label class="input-label" for="hexInput">十六进制报文或日志内容</label>
+        <textarea id="hexInput" rows="6" placeholder="请输入十六进制报文，或直接粘贴包含 0x40 报文的日志内容"></textarea>
+        <div class="input-actions">
+            <button id="parseButton" type="button">解析输入内容</button>
+            <button id="clearButton" class="secondary" type="button">清空</button>
+        </div>
+        <label class="input-label" for="logFile" style="margin-top:16px">上传日志文本（可选）</label>
+        <div id="dropZone" class="drop-zone">将日志文件拖放到此处，或点击选择文件。
+            <input id="logFile" type="file" accept=".log,.txt" />
+        </div>
+        <div class="input-actions">
+            <button id="parseLogButton" type="button">提取并解析日志中的 0x40</button>
+        </div>
+        <div id="inputStatus" class="input-status">尚未解析。</div>
+        <div id="frameList" class="frame-list"></div>
     </div>
     <div class="info-section" id="infoSection"></div>
-    <div class="split-section">
-        <div id="alarmSection">
-            <h3>报警数据</h3>
-            <table id="alarmTable">
-                <thead>
-                <tr>
-                    <th>字节序号</th>
-                    <th>字节值</th>
-                    <th>位 0</th>
-                    <th>位 1</th>
-                    <th>位 3</th>
-                    <th>位 2</th>
-                    <th>位 4</th>
-                    <th>位 5</th>
-                    <th>位 6</th>
-                    <th>位 7</th>
-                </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+    <div class="data-section" id="dataSection">
+        <div class="data-tabs" role="tablist">
+            <button type="button" class="data-tab active" data-target="alarmPanel" role="tab" aria-selected="true">报警数据</button>
+            <button type="button" class="data-tab" data-target="statePanel" role="tab" aria-selected="false">状态数据</button>
         </div>
-        <div id="stateSection">
-            <h3>状态数据</h3>
-            <table id="stateTable">
-                <thead>
-                <tr>
-                    <th>字节序号</th>
-                    <th>字节值</th>
-                    <th>位 0</th>
-                    <th>位 1</th>
-                    <th>位 3</th>
-                    <th>位 2</th>
-                    <th>位 4</th>
-                    <th>位 5</th>
-                    <th>位 6</th>
-                    <th>位 7</th>
-                </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+        <div class="data-panel active" id="alarmPanel" role="tabpanel">
+            <div class="data-toolbar">
+                <div class="view-mode" role="group" aria-label="报警数据筛选">
+                    <button type="button" class="view-filter active" data-type="alarm" data-mode="all">全部位</button>
+                    <button type="button" class="view-filter" data-type="alarm" data-mode="active">仅显示 1</button>
+                </div>
+                <input class="data-search" id="alarmSearch" type="search" placeholder="搜索位序号、字节值或含义">
+                <span class="data-summary" id="alarmSummary"></span>
+            </div>
+            <div class="data-table-wrap">
+                <table class="data-table" id="alarmTable">
+                    <thead><tr><th>字节序号</th><th>字节值</th><th>位序号</th><th>位值</th><th class="meaning-column">含义</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="data-panel" id="statePanel" role="tabpanel">
+            <div class="data-toolbar">
+                <div class="view-mode" role="group" aria-label="状态数据筛选">
+                    <button type="button" class="view-filter active" data-type="state" data-mode="all">全部位</button>
+                    <button type="button" class="view-filter" data-type="state" data-mode="active">仅显示 1</button>
+                </div>
+                <input class="data-search" id="stateSearch" type="search" placeholder="搜索位序号、字节值或含义">
+                <span class="data-summary" id="stateSummary"></span>
+            </div>
+            <div class="data-table-wrap">
+                <table class="data-table" id="stateTable">
+                    <thead><tr><th>字节序号</th><th>字节值</th><th>位序号</th><th>位值</th><th class="meaning-column">含义</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-    document.getElementById('parseButton').addEventListener('click', parseMessage);
+    let bitConfig = null;
+    let currentParsed = null;
+    let selectedFrames = [];
+    let selectedIndex = 0;
+    let activeDataType = 'alarm';
+    const viewState = {
+        alarm: { mode: 'all', query: '' },
+        state: { mode: 'all', query: '' }
+    };
 
-    function parseMessage() {
-        const hexInput = document.getElementById('hexInput').value.replace(/\s/g, '');
-        if (!/^[0-9A-Fa-f]+$/.test(hexInput)) {
-            displayError('无效的十六进制字符串');
+    document.getElementById('parseButton').addEventListener('click', parseInput);
+    document.getElementById('parseLogButton').addEventListener('click', parseLogFile);
+    document.getElementById('logFile').addEventListener('change', parseLogFile);
+    document.getElementById('clearButton').addEventListener('click', clearInput);
+    document.getElementById('loadConfigButton').addEventListener('click', loadBitConfig);
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', event => { event.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', event => {
+        event.preventDefault();
+        dropZone.classList.remove('dragover');
+        readLogFile(event.dataTransfer.files[0]);
+    });
+    document.querySelectorAll('.data-tab').forEach(tab => {
+        tab.addEventListener('click', () => selectDataTab(tab.dataset.target === 'statePanel' ? 'state' : 'alarm'));
+    });
+    document.querySelectorAll('.view-filter').forEach(button => {
+        button.addEventListener('click', () => {
+            viewState[button.dataset.type].mode = button.dataset.mode;
+            updateFilterButtons(button.dataset.type);
+            renderDataTable(button.dataset.type);
+        });
+    });
+    document.getElementById('alarmSearch').addEventListener('input', event => updateSearch('alarm', event.target.value));
+    document.getElementById('stateSearch').addEventListener('input', event => updateSearch('state', event.target.value));
+
+    function selectDataTab(type) {
+        activeDataType = type;
+        document.querySelectorAll('.data-tab').forEach(tab => {
+            const isActive = (type === 'alarm' && tab.dataset.target === 'alarmPanel') || (type === 'state' && tab.dataset.target === 'statePanel');
+            tab.classList.toggle('active', isActive);
+            tab.setAttribute('aria-selected', String(isActive));
+        });
+        document.querySelectorAll('.data-panel').forEach(panel => panel.classList.toggle('active', panel.id === `${type}Panel`));
+    }
+
+    function updateSearch(type, query) {
+        viewState[type].query = query.trim().toLowerCase();
+        renderDataTable(type);
+    }
+
+    function updateFilterButtons(type) {
+        document.querySelectorAll(`.view-filter[data-type="${type}"]`).forEach(button => {
+            button.classList.toggle('active', button.dataset.mode === viewState[type].mode);
+        });
+    }
+
+    function loadBitConfig() {
+        const input = document.getElementById('configFile');
+        const status = document.getElementById('configStatus');
+        if (!input.files.length) {
+            bitConfig = null;
+            status.className = '';
+            status.textContent = '未选择配置文件，解析时仅显示原始位值。';
             return;
         }
 
-        const bytes = hexToBytes(hexInput);
-        if (!validateMessage(bytes)) {
-            displayError('报文格式无效');
-            return;
+        const files = Array.from(input.files);
+        Promise.all(files.map(file => readConfigFile(file))).then(documents => {
+            try {
+                bitConfig = buildBitConfig(documents);
+                const alarmCount = Object.keys(bitConfig.alarm).length;
+                const stateCount = Object.keys(bitConfig.state).length;
+                status.className = 'config-ok';
+                status.textContent = `配置加载成功（${files.length} 个文件）：报警位 ${alarmCount} 个，状态位 ${stateCount} 个。`;
+                if (currentParsed) renderAllDataTables();
+            } catch (error) {
+                bitConfig = null;
+                status.className = 'config-error';
+                status.textContent = `配置加载失败：${error.message}`;
+                if (currentParsed) renderAllDataTables();
+            }
+        }).catch(() => {
+            bitConfig = null;
+            status.className = 'config-error';
+            status.textContent = '配置文件读取失败。';
+            if (currentParsed) renderAllDataTables();
+        });
+    }
+
+    function readConfigFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = event => resolve({ name: file.name, text: event.target.result });
+            reader.onerror = reject;
+            reader.readAsText(file, 'UTF-8');
+        });
+    }
+
+    function buildBitConfig(documents) {
+        const xmlSections = [];
+        const plainDocuments = [];
+        documents.forEach(document => {
+            if (/\.xml$/i.test(document.name) || /^\s*</.test(document.text)) {
+                const section = parseXmlBitConfig(document.text, document.name);
+                if (section) xmlSections.push(section);
+            } else {
+                plainDocuments.push(document);
+            }
+        });
+
+        if (xmlSections.length) {
+            const result = { alarm: {}, state: {} };
+            const byKind = kind => xmlSections.find(section => section.kind === kind);
+            let offset = 0;
+            ['stateAlarm', 'boardAlarm', 'commAlarm', 'ioAlarm'].forEach(kind => {
+                const section = byKind(kind);
+                if (!section) return;
+                Object.keys(section.entries).forEach(index => { result.alarm[offset + Number(index)] = section.entries[index]; });
+                offset += section.count;
+            });
+            offset = 0;
+            const csm = byKind('csmStatus');
+            if (csm) {
+                Object.keys(csm.entries).forEach(index => { result.state[offset + Number(index)] = csm.entries[index]; });
+                offset += csm.count;
+            }
+            const io = byKind('ioAlarm');
+            if (io) {
+                Object.keys(io.entries).forEach(index => { result.state[offset + Number(index)] = io.entries[index]; });
+                offset += io.count;
+            }
+            if (csm && io) {
+                ['A系主机状态', 'A系主机运行状态', 'A/B系同步状态', 'B系主机状态', 'B系主机运行状态']
+                    .forEach((meaning, index) => { result.state[offset + index] = meaning; });
+            }
+            if (Object.keys(result.alarm).length || Object.keys(result.state).length) return result;
         }
 
-        const parsed = parseMessageData(bytes);
-        displayInfo(parsed);
-        displayData(parsed.alarmData, 'alarmTable', '报警数据', parsed.alarmNum);
-        displayData(parsed.stateData, 'stateTable', '状态数据', parsed.stateNum);
+        if (plainDocuments.length === 1) return parseBitConfig(plainDocuments[0].text, plainDocuments[0].name);
+        const merged = { alarm: {}, state: {} };
+        plainDocuments.forEach(document => {
+            const parsed = parseBitConfig(document.text, document.name);
+            Object.assign(merged.alarm, parsed.alarm);
+            Object.assign(merged.state, parsed.state);
+        });
+        if (!Object.keys(merged.alarm).length && !Object.keys(merged.state).length) throw new Error('未找到有效的位定义');
+        return merged;
+    }
+
+    function parseBitConfig(text, fileName) {
+        const trimmed = text.replace(/^\uFEFF/, '').trim();
+        if (!trimmed) throw new Error('文件为空');
+        if (/\.json$/i.test(fileName) || /^[\[{]/.test(trimmed)) {
+            try {
+                return normalizeBitConfig(JSON.parse(trimmed));
+            } catch (error) {
+                if (/\.json$/i.test(fileName)) throw new Error(`JSON 格式无效：${error.message}`);
+            }
+        }
+
+        const result = { alarm: {}, state: {} };
+        trimmed.split(/\r?\n/).forEach((line, lineIndex) => {
+            const clean = line.trim();
+            if (!clean || clean.startsWith('#') || clean.startsWith('//')) return;
+            const fields = clean.split(/[\t,;|]/).map(value => value.trim());
+            if (/^(type|类型|bit|位|meaning|含义)$/i.test(fields[0])) return;
+            let type = fields[0].toLowerCase();
+            if (/^(报警|告警|alarm|alarms)$/.test(type)) type = 'alarm';
+            else if (/^(状态|state|states)$/.test(type)) type = 'state';
+            else {
+                const match = clean.match(/^(alarm|alarms|state|states|报警|告警|状态)\s*(?:[:\[（(]\s*)?(\d+)\s*(?:[\]\)）]\s*)?(?::\s*)?(.*)$/i);
+                if (match) {
+                    type = /state|状态/i.test(match[1]) ? 'state' : 'alarm';
+                    fields.splice(0, fields.length, type, match[2], match[3]);
+                }
+            }
+            const bit = Number.parseInt(fields[1], 10);
+            const meaning = fields.slice(2).join(' ').trim();
+            if ((type !== 'alarm' && type !== 'state') || !Number.isInteger(bit) || bit < 0 || !meaning) {
+                throw new Error(`第 ${lineIndex + 1} 行格式无效，应为：alarm,位序号,含义`);
+            }
+            result[type][bit] = meaning;
+        });
+        if (!Object.keys(result.alarm).length && !Object.keys(result.state).length) {
+            throw new Error('未找到有效的报警或状态位定义');
+        }
+        return result;
+    }
+
+    function parseXmlBitConfig(text, fileName) {
+        const xml = new DOMParser().parseFromString(text, 'application/xml');
+        if (xml.querySelector('parsererror')) throw new Error(`${fileName} XML 格式无效`);
+        const lowerName = fileName.toLowerCase();
+        let kind;
+        let nodes;
+        if (/statealarm/.test(lowerName) || xml.querySelector('MSSCodes MSSCode')) {
+            kind = 'stateAlarm';
+            nodes = Array.from(xml.querySelectorAll('MSSCodes MSSCode'));
+        } else if (/boardalarms|boardotheralarms/.test(lowerName) || xml.querySelector('BoardAlarms BoardAlarm, BoardOtherAlarms BoardOtherAlarm, BoardOtherAlarm')) {
+            kind = 'boardAlarm';
+            nodes = Array.from(xml.querySelectorAll('BoardAlarms BoardAlarm, BoardOtherAlarms BoardOtherAlarm, BoardOtherAlarm'));
+        } else if (/commalarms/.test(lowerName) || xml.querySelector('CommAlarms CommAlarm')) {
+            kind = 'commAlarm';
+            nodes = Array.from(xml.querySelectorAll('CommAlarms CommAlarm'));
+        } else if (/ioalarms/.test(lowerName) || xml.querySelector('IOAlarms IOAlarm')) {
+            kind = 'ioAlarm';
+            nodes = Array.from(xml.querySelectorAll('IOAlarms IOAlarm'));
+        } else if (/csmstatus/.test(lowerName) || xml.querySelector('Statuses Status')) {
+            kind = 'csmStatus';
+            nodes = Array.from(xml.querySelectorAll('Statuses Status'));
+        } else {
+            return null;
+        }
+
+        const entries = {};
+        nodes.sort((left, right) => {
+            const leftIndex = Number.parseInt(left.getAttribute('Index') || '', 10);
+            const rightIndex = Number.parseInt(right.getAttribute('Index') || '', 10);
+            if (Number.isInteger(leftIndex) && Number.isInteger(rightIndex)) return leftIndex - rightIndex;
+            return 0;
+        });
+        nodes.forEach((node, index) => {
+            const attr = name => node.getAttribute(name) || '';
+            let meaning = '';
+            if (kind === 'stateAlarm') {
+                meaning = [attr('AlarmType'), attr('DevName'), attr('AlarmId') ? `告警ID ${attr('AlarmId')}` : ''].filter(Boolean).join('：');
+            } else if (kind === 'boardAlarm') {
+                meaning = [attr('BoardType') || '板卡', attr('CageAddress') ? `机笼 ${attr('CageAddress')}` : '', attr('SlotIndex') ? `槽位 ${attr('SlotIndex')}` : ''].filter(Boolean).join('，');
+            } else if (kind === 'commAlarm') {
+                meaning = [attr('LcName') || `本地 ${attr('LcId')}`, attr('RmName') || attr('RmDevName') || `远端 ${attr('RmId')}`, attr('Net') !== '' ? `网络 ${Number(attr('Net')) + 1}` : ''].filter(Boolean).join('，');
+            } else if (kind === 'ioAlarm') {
+                meaning = [attr('BitName'), attr('BoardType'), attr('NameIndex')].filter(Boolean).join('，');
+            } else {
+                meaning = attr('Description') || attr('Name') || attr('DeviceStatus');
+            }
+            if (meaning) entries[index] = meaning;
+        });
+        return { kind, entries, count: nodes.length };
+    }
+
+    function normalizeBitConfig(source) {
+        if (!source || typeof source !== 'object') throw new Error('配置必须是 JSON 对象');
+        const result = { alarm: {}, state: {} };
+        if (Array.isArray(source)) {
+            source.forEach((item, index) => {
+                if (!item || typeof item !== 'object') return;
+                const rawType = String(item.type ?? item.kind ?? item.dataType ?? '').toLowerCase();
+                const type = /state|状态/.test(rawType) ? 'state' : /alarm|报警|告警/.test(rawType) ? 'alarm' : '';
+                const bit = Number.parseInt(item.bit ?? item.index ?? item.id ?? index, 10);
+                const meaning = item.meaning ?? item.name ?? item.description ?? item.desc;
+                if (type && Number.isInteger(bit) && meaning != null && String(meaning).trim()) result[type][bit] = String(meaning).trim();
+            });
+            if (!Object.keys(result.alarm).length && !Object.keys(result.state).length) throw new Error('未找到有效的报警或状态位定义');
+            return result;
+        }
+        const sections = {
+            alarm: source.alarm ?? source.alarms ?? source.alarmData ?? source['报警'] ?? source['告警'],
+            state: source.state ?? source.states ?? source.stateData ?? source['状态']
+        };
+        Object.keys(sections).forEach(type => {
+            const section = sections[type];
+            if (section == null) return;
+            if (Array.isArray(section)) {
+                section.forEach((item, index) => {
+                    if (typeof item === 'string') result[type][index] = item;
+                    else if (item && typeof item === 'object') {
+                        const bit = Number.parseInt(item.bit ?? item.index ?? item.id ?? index, 10);
+                        const meaning = item.meaning ?? item.name ?? item.description ?? item.desc;
+                        if (Number.isInteger(bit) && meaning != null && String(meaning).trim()) result[type][bit] = String(meaning).trim();
+                    }
+                });
+            } else if (typeof section === 'object') {
+                const bits = section.bits ?? section.items ?? section.definitions ?? section;
+                Object.keys(bits).forEach(key => {
+                    const item = bits[key];
+                    const bit = Number.parseInt(item && typeof item === 'object' ? (item.bit ?? item.index ?? key) : key, 10);
+                    const meaning = item && typeof item === 'object' ? (item.meaning ?? item.name ?? item.description ?? item.desc) : item;
+                    if (Number.isInteger(bit) && meaning != null && String(meaning).trim()) result[type][bit] = String(meaning).trim();
+                });
+            }
+        });
+        if (!Object.keys(result.alarm).length && !Object.keys(result.state).length) throw new Error('未找到有效的报警或状态位定义');
+        return result;
+    }
+
+    function setInputStatus(message, type) {
+        const status = document.getElementById('inputStatus');
+        status.className = `input-status${type ? ` ${type}` : ''}`;
+        status.textContent = message;
+    }
+
+    function parseInput() {
+        const text = document.getElementById('hexInput').value.trim();
+        if (!text) {
+            const message = '请输入十六进制报文或日志内容';
+            displayError(message);
+            setInputStatus(`解析失败：${message}`, 'error');
+            return;
+        }
+        try {
+            if (/\[\s*\d+\s+Bytes\s+bin\]/i.test(text) || /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+40\b/i.test(text)) {
+                parseLogText(text);
+                return;
+            }
+            const normalized = text.replace(/\s/g, '');
+            if (!/^[0-9A-Fa-f]+$/.test(normalized) || normalized.length % 2) throw new Error('无效的十六进制字符串');
+            showFrames([hexToBytes(normalized)]);
+            setInputStatus('解析成功。', 'ok');
+        } catch (error) {
+            displayError(error.message || '报文格式无效');
+            setInputStatus(`解析失败：${error.message}`, 'error');
+        }
+    }
+
+    function parseLogText(text) {
+        const lines = text.split(/\r?\n/);
+        const frames = [];
+        const marker = /\[\s*(\d+)\s+Bytes\s+bin\](.*)$/i;
+        const bare = /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+40\b/i;
+        lines.forEach(line => {
+            const match = line.match(marker);
+            let source = match ? match[2] : null;
+            if (!source) {
+                const at = line.search(bare);
+                if (at < 0) return;
+                source = line.slice(at);
+            }
+            const bytes = hexBytes(source);
+            extractFrames(bytes).forEach(frame => frames.push(frame));
+        });
+        if (!frames.length) throw new Error('未找到完整的 0x40 报文');
+        showFrames(frames);
+        setInputStatus(`日志提取成功：找到 ${frames.length} 条 0x40 报文。`, 'ok');
+    }
+
+    function hexBytes(text) {
+        const matches = (text || '').match(/[0-9a-fA-F]{2}/g) || [];
+        return matches.map(value => parseInt(value, 16));
+    }
+
+    function extractFrames(bytes) {
+        const frames = [];
+        let p = 0;
+        while (p + 4 <= bytes.length) {
+            if (bytes[p] !== 0xAA || bytes[p + 3] !== 0x40) { p++; continue; }
+            const total = ((bytes[p + 1] << 8) | bytes[p + 2]) + 3;
+            if (total < 20 || p + total > bytes.length) { p++; continue; }
+            if (bytes[p + total - 5] === 0x55) {
+                const frame = bytes.slice(p, p + total);
+                if (validateMessage(frame)) frames.push(frame);
+                p += total;
+            } else p++;
+        }
+        return frames;
+    }
+
+    function showFrames(frames) {
+        selectedFrames = frames;
+        selectedIndex = 0;
+        const frameList = document.getElementById('frameList');
+        frameList.innerHTML = '';
+        if (!frames.length) throw new Error('未找到 0x40 报文');
+        frames.forEach((bytes, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = `帧 ${index + 1}（${bytes.length} 字节）`;
+            button.addEventListener('click', () => {
+                selectedIndex = index;
+                renderSelectedFrame();
+                updateFrameButtons();
+            });
+            frameList.appendChild(button);
+        });
+        updateFrameButtons();
+        renderSelectedFrame();
+    }
+
+    function updateFrameButtons() {
+        Array.from(document.getElementById('frameList').children).forEach((button, index) => {
+            button.classList.toggle('active', index === selectedIndex);
+        });
+    }
+
+    function renderSelectedFrame() {
+        const bytes = selectedFrames[selectedIndex];
+        if (!bytes) return;
+        if (!validateMessage(bytes)) throw new Error('报文格式无效');
+        currentParsed = parseMessageData(bytes);
+        displayInfo(currentParsed);
+        updateDataTabCounts(currentParsed);
+        renderAllDataTables();
+    }
+
+    function readLogFile(file) {
+        if (!file) {
+            setInputStatus('请先选择日志文件。', 'error');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = event => {
+            try { parseLogText(event.target.result); }
+            catch (error) {
+                displayError(error.message || '日志格式无效');
+                setInputStatus(`日志解析失败：${error.message}`, 'error');
+            }
+        };
+        reader.onerror = () => setInputStatus('日志文件读取失败。', 'error');
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    function parseLogFile() {
+        readLogFile(document.getElementById('logFile').files[0]);
+    }
+
+    function clearInput() {
+        document.getElementById('hexInput').value = '';
+        document.getElementById('logFile').value = '';
+        document.getElementById('frameList').innerHTML = '';
+        selectedFrames = [];
+        currentParsed = null;
+        document.getElementById('infoSection').innerHTML = '';
+        document.querySelector('#alarmTable tbody').innerHTML = '';
+        document.querySelector('#stateTable tbody').innerHTML = '';
+        document.getElementById('alarmSummary').textContent = '';
+        document.getElementById('stateSummary').textContent = '';
+        document.querySelector('[data-target="alarmPanel"]').textContent = '报警数据';
+        document.querySelector('[data-target="statePanel"]').textContent = '状态数据';
+        setInputStatus('尚未解析。', '');
     }
 
     function hexToBytes(hex) {
@@ -272,34 +910,87 @@
         `;
     }
 
-    function displayData(data, tableId, dataType, dataNum) {
+    function updateDataTabCounts(parsed) {
+        document.querySelector('[data-target="alarmPanel"]').textContent = `报警数据（${parsed.alarmNum} 字节）`;
+        document.querySelector('[data-target="statePanel"]').textContent = `状态数据（${parsed.stateNum} 字节）`;
+    }
+
+    function renderAllDataTables() {
+        if (!currentParsed) return;
+        renderDataTable('alarm');
+        renderDataTable('state');
+        setMeaningColumnVisibility(Boolean(bitConfig));
+    }
+
+    function renderDataTable(type) {
+        if (!currentParsed) return;
+        const data = type === 'alarm' ? currentParsed.alarmData : currentParsed.stateData;
+        const dataNum = type === 'alarm' ? currentParsed.alarmNum : currentParsed.stateNum;
+        const tableId = type === 'alarm' ? 'alarmTable' : 'stateTable';
         const tbody = document.querySelector(`#${tableId} tbody`);
-        tbody.innerHTML = '';
-        for (let i = 0; i < dataNum; i++) {
-            const byte = data[i] || 0;
+        const configMap = bitConfig ? bitConfig[type] : {};
+        const query = viewState[type].query;
+        const rows = [];
+        for (let byteIndex = 0; byteIndex < dataNum; byteIndex++) {
+            const byte = data[byteIndex] || 0;
             const byteHex = '0x' + byte.toString(16).padStart(2, '0').toUpperCase();
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${i + 1}</td>
-                <td>${byteHex}</td>
-                <td class="${byte & 1 ? 'bit-active' : ''}">${byte & 1} (${i * 8 + 0})</td>
-                <td class="${(byte >> 1) & 1 ? 'bit-active' : ''}">${(byte >> 1) & 1} (${i * 8 + 1})</td>
-                <td class="${(byte >> 2) & 1 ? 'bit-active' : ''}">${(byte >> 2) & 1} (${i * 8 + 2})</td>
-                <td class="${(byte >> 3) & 1 ? 'bit-active' : ''}">${(byte >> 3) & 1} (${i * 8 + 3})</td>
-                <td class="${(byte >> 4) & 1 ? 'bit-active' : ''}">${(byte >> 4) & 1} (${i * 8 + 4})</td>
-                <td class="${(byte >> 5) & 1 ? 'bit-active' : ''}">${(byte >> 5) & 1} (${i * 8 + 5})</td>
-                <td class="${(byte >> 6) & 1 ? 'bit-active' : ''}">${(byte >> 6) & 1} (${i * 8 + 6})</td>
-                <td class="${(byte >> 7) & 1 ? 'bit-active' : ''}">${(byte >> 7) & 1} (${i * 8 + 7})</td>
-            `;
-            tbody.appendChild(row);
+            for (let bit = 0; bit < 8; bit++) {
+                const bitIndex = byteIndex * 8 + bit;
+                const value = (byte >> bit) & 1;
+                const meaning = configMap[bitIndex] || '';
+                const searchable = `${byteIndex + 1} ${byteHex} ${bitIndex} ${value} ${meaning}`.toLowerCase();
+                if (viewState[type].mode === 'active' && value !== 1) continue;
+                if (query && !searchable.includes(query)) continue;
+                rows.push({ byteIndex, byteHex, bitIndex, value, meaning });
+            }
         }
+
+        tbody.innerHTML = '';
+        if (!rows.length) {
+            const row = document.createElement('tr');
+            row.className = 'empty-row';
+            row.innerHTML = '<td colspan="5">没有符合条件的位</td>';
+            tbody.appendChild(row);
+        } else {
+            rows.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.byteIndex + 1}</td>
+                    <td>${item.byteHex}</td>
+                    <td>${item.bitIndex}</td>
+                    <td class="bit-value ${item.value ? 'active' : ''}">${item.value}</td>
+                    <td class="meaning-column">${escapeHtml(item.meaning)}</td>`;
+                tbody.appendChild(row);
+            });
+        }
+        const activeCount = rows.filter(row => row.value === 1).length;
+        const totalCount = dataNum * 8;
+        document.getElementById(`${type}Summary`).textContent = `显示 ${rows.length}/${totalCount} 位，其中值为 1：${activeCount}`;
+    }
+
+    function setMeaningColumnVisibility(visible) {
+        document.querySelectorAll('.meaning-column').forEach(column => {
+            column.style.display = visible ? '' : 'none';
+        });
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
     }
 
     function displayError(message) {
+        currentParsed = null;
+        selectedFrames = [];
+        selectedIndex = 0;
+        document.getElementById('frameList').innerHTML = '';
         const infoSection = document.getElementById('infoSection');
         infoSection.innerHTML = `<span class="error">错误：${message}</span>`;
         document.querySelector('#alarmTable tbody').innerHTML = '';
         document.querySelector('#stateTable tbody').innerHTML = '';
+        document.getElementById('alarmSummary').textContent = '';
+        document.getElementById('stateSummary').textContent = '';
+        document.querySelector('[data-target="alarmPanel"]').textContent = '报警数据';
+        document.querySelector('[data-target="statePanel"]').textContent = '状态数据';
     }
 </script>
 </body>
