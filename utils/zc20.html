@@ -25,12 +25,13 @@
         }
         textarea {
             width: 100%;
-            height: 100px;
+            min-height: 160px;
             margin-bottom: 10px;
             font-family: monospace;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
+            resize: vertical;
         }
         select {
             padding: 5px;
@@ -48,6 +49,68 @@
         button:hover {
             background-color: #0056b3;
         }
+        .input-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        .drop-zone {
+            margin-top: 12px;
+            padding: 14px;
+            border: 1px dashed #8aa4bd;
+            border-radius: 4px;
+            background: #f8fafc;
+            transition: background-color .15s, border-color .15s;
+        }
+        .drop-zone.dragover {
+            border-color: #007bff;
+            background: #eaf4ff;
+        }
+        .drop-zone input {
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .input-status {
+            margin-top: 12px;
+            padding: 9px 11px;
+            border-radius: 4px;
+            color: #495057;
+            background: #eef1f4;
+        }
+        .input-status.ok {
+            color: #146c43;
+            background: #d1e7dd;
+        }
+        .input-status.error {
+            color: #b02a37;
+            background: #f8d7da;
+        }
+        .frame-list {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-bottom: 4px;
+            overflow-x: auto;
+        }
+        .frame-button {
+            flex: 0 0 auto;
+            padding: 6px 10px;
+            color: #334155;
+            background: #e9ecef;
+        }
+        .frame-button:hover,
+        .frame-button.active {
+            color: white;
+            background: #0d6efd;
+        }
         #output {
             margin-top: 20px;
             padding: 10px;
@@ -56,6 +119,9 @@
             background-color: #fafafa;
             white-space: pre-wrap;
             font-family: monospace;
+        }
+        #output:empty {
+            display: none;
         }
         .error {
             color: red;
@@ -77,41 +143,128 @@
         <option value="other">其他厂商BiIOM</option>
     </select>
     <br>
-    <label for="inputHex">请输入十六进制报文（可含空格）:</label>
-    <textarea id="inputHex" class="form-control" placeholder="请输入十六进制报文，例如: AA 00 20 20 23 01 01 12 00 00..."></textarea>
-    <button onclick="parseMessage()" class="btn btn-primary">解析报文</button>
+    <label for="inputHex">十六进制报文或日志内容:</label>
+    <textarea id="inputHex" class="form-control" spellcheck="false" placeholder="粘贴完整十六进制报文，或包含 [zc_msg] Recv:[... Bytes bin] 的日志"></textarea>
+    <div id="dropZone" class="drop-zone">
+        <label for="logFile">上传日志文件</label>
+        <input id="logFile" type="file" accept=".log,.txt,text/plain">
+    </div>
+    <div class="input-actions">
+        <button id="parseButton" type="button" class="btn btn-primary">解析输入内容</button>
+        <button id="clearButton" type="button" class="btn btn-secondary">清空</button>
+    </div>
+    <div id="inputStatus" class="input-status">尚未解析。</div>
+    <div id="frameList" class="frame-list"></div>
     <div id="output"></div>
 </div>
 
 <script>
-    function parseMessage() {
-        const input = document.getElementById('inputHex').value.trim();
-        const biIOMType = document.getElementById('biIOMType').value;
-        const isSelfDevelopedBiIOM = biIOMType === 'self';
-        const output = document.getElementById('output');
-        output.innerHTML = '';
+    let extractedFrames = [];
 
-        // 去除输入中的空格
-        const cleanedInput = input.replace(/\s+/g, '');
-
-        // 验证输入是否为有效的十六进制字符串
-        if (!/^[0-9A-Fa-f]+$/.test(cleanedInput) || cleanedInput.length % 2 !== 0) {
-            output.innerHTML = '<span class="error">错误：请输入有效的十六进制字符串（去除空格后长度需为偶数）。</span>';
-            return;
-        }
-
-        // 将十六进制字符串转换为字节数组
+    function hexToBytes(hex) {
         const bytes = [];
-        for (let i = 0; i < cleanedInput.length; i += 2) {
-            bytes.push(parseInt(cleanedInput.substr(i, 2), 16));
+        for (let i = 0; i < hex.length; i += 2) {
+            bytes.push(parseInt(hex.slice(i, i + 2), 16));
+        }
+        return bytes;
+    }
+
+    function extractZc20Frames(input) {
+        const text = input.replace(/^\uFEFF/, '').trim();
+        if (!text) throw new Error('请输入十六进制报文或日志内容。');
+
+        const compact = text.replace(/0x/gi, '').replace(/[\s,;:_-]+/g, '');
+        let tokens;
+        if (/^[0-9a-f]+$/i.test(compact) && compact.length % 2 === 0) {
+            tokens = hexToBytes(compact);
+        } else {
+            tokens = Array.from(text.matchAll(/(?<![0-9a-f])(?:0x)?([0-9a-f]{2})(?![0-9a-f])/gi), match => parseInt(match[1], 16));
         }
 
-        try {
-            const result = parseZcmMessage(bytes, isSelfDevelopedBiIOM);
-            output.innerHTML = result;
-        } catch (e) {
-            output.innerHTML = `<span class="error">解析错误：${e.message}</span>`;
+        const frames = [];
+        for (let i = 0; i + 3 < tokens.length; i++) {
+            if (tokens[i] !== 0xAA || tokens[i + 3] !== 0x20) continue;
+            const totalLength = ((tokens[i + 1] << 8) | tokens[i + 2]) + 3;
+            if (totalLength < 9 || i + totalLength > tokens.length) continue;
+            const frame = tokens.slice(i, i + totalLength);
+            if (frame[frame.length - 5] !== 0x55) continue;
+            frames.push(frame);
+            i += totalLength - 1;
         }
+
+        if (!frames.length) throw new Error('未找到完整的 ZC 0x20 报文。');
+        return frames;
+    }
+
+    function setInputStatus(message, type = '') {
+        const status = document.getElementById('inputStatus');
+        status.className = `input-status${type ? ` ${type}` : ''}`;
+        status.textContent = message;
+    }
+
+    function showFrame(index) {
+        const biIOMType = document.getElementById('biIOMType').value;
+        const output = document.getElementById('output');
+        document.querySelectorAll('.frame-button').forEach((button, buttonIndex) => {
+            button.classList.toggle('active', buttonIndex === index);
+        });
+        try {
+            output.innerHTML = parseZcmMessage(extractedFrames[index], biIOMType === 'self');
+        } catch (error) {
+            output.innerHTML = `<span class="error">解析错误：${error.message}</span>`;
+        }
+    }
+
+    function showFrames(frames, sourceName = '') {
+        extractedFrames = frames;
+        const frameList = document.getElementById('frameList');
+        frameList.innerHTML = frames.map((frame, index) =>
+            `<button type="button" class="frame-button" data-index="${index}">#${index + 1} · ${frame.length} B</button>`
+        ).join('');
+        frameList.querySelectorAll('.frame-button').forEach(button => {
+            button.addEventListener('click', () => showFrame(Number(button.dataset.index)));
+        });
+        const source = sourceName ? `（${sourceName}）` : '';
+        setInputStatus(`提取成功${source}：找到 ${frames.length} 条完整的 0x20 报文。`, 'ok');
+        showFrame(0);
+    }
+
+    function parseMessage() {
+        const input = document.getElementById('inputHex').value;
+        const output = document.getElementById('output');
+        try {
+            showFrames(extractZc20Frames(input));
+        } catch (error) {
+            extractedFrames = [];
+            document.getElementById('frameList').innerHTML = '';
+            output.innerHTML = `<span class="error">解析错误：${error.message}</span>`;
+            setInputStatus(`解析失败：${error.message}`, 'error');
+        }
+    }
+
+    function readLogFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = event => {
+            document.getElementById('inputHex').value = event.target.result;
+            try {
+                showFrames(extractZc20Frames(event.target.result), file.name);
+            } catch (error) {
+                document.getElementById('output').innerHTML = `<span class="error">解析错误：${error.message}</span>`;
+                setInputStatus(`日志解析失败：${error.message}`, 'error');
+            }
+        };
+        reader.onerror = () => setInputStatus('日志文件读取失败。', 'error');
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    function clearInput() {
+        extractedFrames = [];
+        document.getElementById('inputHex').value = '';
+        document.getElementById('logFile').value = '';
+        document.getElementById('frameList').innerHTML = '';
+        document.getElementById('output').innerHTML = '';
+        setInputStatus('尚未解析。');
     }
 
     function parseComStatAppendixB(comStat) {
@@ -154,7 +307,7 @@
 
     function createTable(headers, rows, title) {
         if (rows.length === 0) return `<h5>${title}</h5><p>无数据</p>`;
-        let table = `<h5>${title}</h5><table class="table table-striped table-bordered"><thead><tr>`;
+        let table = `<h5>${title}</h5><div class="table-responsive"><table class="table table-striped table-bordered"><thead><tr>`;
         headers.forEach(header => {
             table += `<th>${header}</th>`;
         });
@@ -166,8 +319,25 @@
             });
             table += `</tr>`;
         });
-        table += `</tbody></table>`;
+        table += `</tbody></table></div>`;
         return table;
+    }
+
+    function readUint32(bytes, pos) {
+        return (((bytes[pos] << 24) >>> 0) |
+            (bytes[pos + 1] << 16) |
+            (bytes[pos + 2] << 8) |
+            bytes[pos + 3]) >>> 0;
+    }
+
+    function formatVersion(bytes, pos) {
+        const major = bytes[pos] >>> 4;
+        const minor = bytes[pos] & 0x0F;
+        const patch = bytes[pos + 1];
+        const build = bytes[pos + 2];
+        const revision = bytes[pos + 3];
+        const version = `${major}.${minor}.${patch}.${build}`;
+        return revision === 0 ? version : `${version}_${revision.toString().padStart(3, '0')}`;
     }
 
     function parseZcmMessage(bytes, isSelfDevelopedBiIOM) {
@@ -217,13 +387,13 @@
 
         // 5. ZcId (4 bytes)
         if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcId</span>';
-        const zcId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+        const zcId = readUint32(bytes, pos);
         output += `ZcId: ${zcId} (ZC编号)\n`;
         pos += 4;
 
         // 6. Sn (4 bytes)
         if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少Sn</span>';
-        const sn = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+        const sn = readUint32(bytes, pos);
         output += `Sn: ${sn} (报文序列号)\n`;
         pos += 4;
 
@@ -294,7 +464,7 @@
         if (pos + zcCbiNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少CbiInfo</span>';
         const cbiInfoRows = [];
         for (let i = 0; i < zcCbiNum; i++) {
-            const cbiId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const cbiId = readUint32(bytes, pos);
             const comStat = bytes[pos + 4];
             const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
                 (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : comStat === 0x33 ? '未知' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
@@ -313,7 +483,7 @@
         if (pos + zcZcNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少ZcInfo</span>';
         const zcInfoRows = [];
         for (let i = 0; i < zcZcNum; i++) {
-            const zcId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const zcId = readUint32(bytes, pos);
             const comStat = bytes[pos + 4];
             const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
                 (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : comStat === 0x33 ? '未知' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
@@ -346,10 +516,15 @@
 
         // 19-22. Software Versions (4*4 bytes)
         if (pos + 15 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少版本号</span>';
-        const versions = ['ZcAppVer', 'ZcPltVer', 'ZcCfgVer', 'ZcmVer'];
+        const versions = [
+            ['ZcAppVer', 'ZC应用软件版本号'],
+            ['ZcPltVer', 'ZC平台软件版本号'],
+            ['ZcCfgVer', 'ZC配置版本号'],
+            ['ZcmVer', 'ZC Monitor软件版本号']
+        ];
         for (let i = 0; i < 4; i++) {
-            const ver = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
-            output += `${versions[i]}: ${ver} (版本号)\n`;
+            const raw = readUint32(bytes, pos);
+            output += `${versions[i][0]}: ${formatVersion(bytes, pos)} (${versions[i][1]}，原始值 0x${raw.toString(16).padStart(8, '0')})\n`;
             pos += 4;
         }
 
@@ -363,7 +538,7 @@
         if (pos + axleSegNum * 5 - 1 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少AxleSegInfo</span>';
         const axleSegInfoRows = [];
         for (let i = 0; i < axleSegNum; i++) {
-            const axleSegId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const axleSegId = readUint32(bytes, pos);
             const axleSegStat = bytes[pos + 4];
             const axleSegStatText = axleSegStat === 0xAA ? '正常' :
                 axleSegStat === 0x55 ? '异常' :
@@ -385,7 +560,7 @@
         if (pos + trainNum * 5 - 1 >= bytes.length && trainNum > 0) return output + warning + '<span class="error">报文过短，缺少CcInfo</span>';
         const ccInfoRows = [];
         for (let i = 0; i < trainNum; i++) {
-            const ccId = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+            const ccId = readUint32(bytes, pos);
             const comStat = bytes[pos + 4];
             const comStatText = isSelfDevelopedBiIOM ? parseComStatAppendixB(comStat) :
                 (comStat === 0xAA ? '正常' : comStat === 0x55 ? '故障' : `预留(0x${comStat.toString(16).padStart(2, '0')})`);
@@ -455,7 +630,7 @@
                 0x73: '到达ZC接入设备上限'
             };
             for (let i = 0; i < regFailNum; i++) {
-                const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+                const pvid = readUint32(bytes, pos);
                 const regFailRsn = bytes[pos + 4];
                 regFailRows.push([pvid, `0x${regFailRsn.toString(16).padStart(2, '0')}`, regFailRsnMap[regFailRsn] || '未知']);
                 pos += 5;
@@ -477,7 +652,7 @@
                 0x78: '注册列车ID未配置'
             };
             for (let i = 0; i < regAbrNum; i++) {
-                const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+                const pvid = readUint32(bytes, pos);
                 const regAbrRsn = bytes[pos + 4];
                 regAbrRows.push([pvid, `0x${regAbrRsn.toString(16).padStart(2, '0')}`, regAbrRsnMap[regAbrRsn] || '未知']);
                 pos += 5;
@@ -498,7 +673,7 @@
                 0x75: '列车异常休眠注销'
             };
             for (let i = 0; i < wsAbrNum; i++) {
-                const pvid = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+                const pvid = readUint32(bytes, pos);
                 const wsAbrRsn = bytes[pos + 4];
                 wsAbrRows.push([pvid, `0x${wsAbrRsn.toString(16).padStart(2, '0')}`, wsAbrRsnMap[wsAbrRsn] || '未知']);
                 pos += 5;
@@ -522,7 +697,7 @@
 
         // 39. CRC (4 bytes)
         if (pos + 3 >= bytes.length) return output + warning + '<span class="error">报文过短，缺少CRC</span>';
-        const crc = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+        const crc = readUint32(bytes, pos);
         output += `CRC: 0x${crc.toString(16).padStart(8, '0')} (CRC校验)\n`;
 
         // 验证长度
@@ -532,6 +707,25 @@
 
         return warning + output;
     }
+
+    document.getElementById('parseButton').addEventListener('click', parseMessage);
+    document.getElementById('clearButton').addEventListener('click', clearInput);
+    document.getElementById('logFile').addEventListener('change', event => readLogFile(event.target.files[0]));
+    document.getElementById('biIOMType').addEventListener('change', () => {
+        if (extractedFrames.length) showFrame(0);
+    });
+
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', event => {
+        event.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', event => {
+        event.preventDefault();
+        dropZone.classList.remove('dragover');
+        readLogFile(event.dataTransfer.files[0]);
+    });
 </script>
 </body>
 </html>
