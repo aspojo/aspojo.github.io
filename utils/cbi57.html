@@ -2,213 +2,521 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>SDM → BiIOM 全体机笼故障状态信息报文解析器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDM=>BiIOM全体机笼故障状态信息报文</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-        h1 { color: #333; }
-        textarea { width: 100%; height: 120px; font-family: Consolas, monospace; }
-        button { padding: 10px 20px; font-size: 16px; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-        th { background: #4CAF50; color: white; }
-        .normal { background: #c8e6c9; }   /* 0x55 */
-        .fault  { background: #ffcdd2; }   /* 0xAA */
-        .absent { background: #fff9c4; }   /* 0x5A */
-        .header { background: #e3f2fd; }
-        .error { color: red; font-weight: bold; }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; padding: 20px; background: #f0f2f5; color: #2c3e50; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+        .container { max-width: 1366px; margin: 0 auto; padding: 30px; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, .1); }
+        h1 { margin: 0 0 30px; color: #34495e; text-align: center; font-size: 2rem; }
+        h2, h3 { color: #34495e; }
+        h2 { margin: 0 0 14px; font-size: 1.3rem; }
+        h3 { margin: 0 0 12px; font-size: 1.15rem; }
+        .input-section { margin-bottom: 26px; }
+        .input-label { display: block; margin: 0 0 8px; color: #34495e; font-weight: 600; }
+        #hexInput { width: 100%; min-height: 140px; padding: 12px; resize: vertical; border: 2px solid #ddd; border-radius: 8px; outline: none; font-family: 'Courier New', Consolas, monospace; font-size: 1rem; transition: border-color .2s, box-shadow .2s; }
+        #hexInput:focus { border-color: #3498db; box-shadow: 0 0 8px rgba(52, 152, 219, .3); }
+        .input-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        button { padding: 11px 24px; border: 0; border-radius: 7px; cursor: pointer; font-size: .95rem; font-weight: 600; }
+        button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid rgba(52, 152, 219, .35); outline-offset: 1px; }
+        #parseButton { background: #3498db; color: #fff; }
+        #parseButton:hover { background: #2980b9; }
+        .secondary { background: #7f8c8d; color: #fff; }
+        .secondary:hover { background: #687475; }
+        .drop-zone { margin-top: 16px; padding: 13px 15px; border: 1px dashed #9db5c9; border-radius: 7px; background: #f8fbfd; color: #526575; transition: background .15s, border-color .15s; }
+        .drop-zone.dragover { border-color: #3498db; background: #eaf4fb; }
+        .drop-zone input[type=file] { display: block; max-width: 100%; margin-top: 8px; }
+        .input-status { min-height: 38px; margin-top: 14px; padding: 9px 11px; border-radius: 6px; background: #eef3f7; color: #526575; font-size: .9rem; }
+        .input-status.ok { background: #e7f5ec; color: #176b38; }
+        .input-status.error { background: #fdecec; color: #a12626; }
+        .frame-toolbar, .data-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+        .frame-toolbar { margin-top: 16px; }
+        .view-mode { display: inline-flex; overflow: hidden; border: 1px solid #cbd5dc; border-radius: 6px; }
+        .view-mode button { padding: 7px 12px; border-right: 1px solid #cbd5dc; border-radius: 0; background: #fff; color: #56636e; font-size: .88rem; font-weight: 500; }
+        .view-mode button:last-child { border-right: 0; }
+        .view-mode button.active { background: #3498db; color: #fff; }
+        .frame-summary, .data-summary { margin-left: auto; color: #667580; font-size: .85rem; }
+        .frame-list-wrap { max-height: 300px; margin-top: 8px; padding: 2px; overflow-y: auto; border: 1px solid #d9e0e5; border-radius: 6px; background: #fbfcfd; }
+        .frame-list { display: flex; flex-direction: column; gap: 6px; }
+        .frame-list button { width: 100%; padding: 8px 11px; border: 1px solid #b9cde0; border-radius: 5px; background: #e8f0f7; color: #164a7b; text-align: left; font-size: .88rem; font-weight: 500; }
+        .frame-list button.active { background: #1769aa; color: #fff; }
+        .frame-empty { padding: 18px; color: #71808c; text-align: center; }
+        .info-section { margin: 20px 0; padding: 18px 20px; border-left: 4px solid #3498db; border-radius: 8px; background: #f8f9fa; }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 24px; }
+        .info-item { min-width: 0; line-height: 1.55; }
+        .info-item dt { display: inline; color: #667580; }
+        .info-item dd { display: inline; margin: 0 0 0 5px; font-weight: 600; word-break: break-word; }
+        .crc-ok { color: #218739; }
+        .crc-error { color: #c0392b; }
+        .data-section { margin-top: 20px; overflow: hidden; border: 1px solid #e0e0e0; border-radius: 8px; background: #f8f9fa; }
+        .data-header { padding: 16px; border-bottom: 1px solid #d9e0e5; background: #eef2f5; }
+        .data-toolbar { margin-top: 0; }
+        .data-search { flex: 1 1 260px; min-width: 180px; padding: 8px 10px; border: 1px solid #cbd5dc; border-radius: 6px; font-size: .9rem; }
+        .table-wrap { max-height: 620px; overflow: auto; border-top: 1px solid #d9e0e5; background: #fff; }
+        table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+        th, td { padding: 10px; border: 1px solid #e0e0e0; text-align: left; vertical-align: top; }
+        th { position: sticky; top: 0; z-index: 1; background: #34495e; color: #fff; white-space: nowrap; }
+        tbody tr:nth-child(even) { background: #f9f9f9; }
+        tbody tr:hover { background: #e8f4f8; }
+        .cage-table th:nth-child(1) { width: 70px; }
+        .cage-table th:nth-child(2) { width: 130px; }
+        .cage-table th:nth-child(3) { width: 170px; }
+        .cage-table th:nth-child(4) { width: 100px; }
+        .cage-table th:nth-child(5) { width: 150px; }
+        .raw-value { color: #667580; font-family: Consolas, 'Courier New', monospace; font-size: .85rem; }
+        .status-value { display: inline-block; min-width: 72px; padding: 3px 7px; border-radius: 4px; font-weight: 700; text-align: center; }
+        .normal { background: #c8e6c9; color: #235b2a; }
+        .fault { background: #ffcdd2; color: #8a1c26; }
+        .absent { background: #fff9c4; color: #6a5a00; }
+        .unknown { background: #e4e7ea; color: #52606c; }
+        .board-list { display: grid; gap: 8px; min-width: 600px; }
+        .board-row { display: grid; grid-template-columns: 70px minmax(110px, 1fr) minmax(110px, 1fr) minmax(220px, 2fr); gap: 8px; align-items: center; padding: 7px; border: 1px solid #e0e6ea; border-radius: 4px; background: #fff; }
+        .board-head { color: #667580; font-size: .82rem; font-weight: 600; }
+        .board-empty { color: #71808c; }
+        details summary { cursor: pointer; color: #2478a9; font-weight: 600; }
+        .legend { margin-top: 12px; color: #667580; font-size: .85rem; }
+        .legend span { display: inline-block; margin-right: 14px; }
+        .hidden { display: none !important; }
+        .error { color: #e74c3c; font-weight: 600; }
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .container { padding: 20px; }
+            h1 { font-size: 1.35rem; word-break: break-word; }
+            #parseButton, .input-actions button { flex: 1 1 140px; }
+            .frame-summary, .data-summary { width: 100%; margin-left: 0; }
+            .data-header { padding: 10px; }
+            .table-wrap { max-height: 560px; }
+            .board-list { min-width: 540px; }
+        }
     </style>
 </head>
 <body>
+<main class="container">
+    <section class="input-section">
+        <h1>SDM=>BiIOM全体机笼故障状态信息报文（MSG_ID=0x57）</h1>
+        <label class="input-label" for="hexInput">十六进制报文或日志内容</label>
+        <textarea id="hexInput" placeholder="请输入十六进制报文，或粘贴包含 0x57 报文的日志内容"></textarea>
+        <div class="input-actions">
+            <button id="parseButton" type="button">解析输入内容</button>
+            <button id="clearButton" class="secondary" type="button">清空</button>
+        </div>
+        <label class="input-label" for="logFile" style="margin-top:16px">上传日志文本（可选）</label>
+        <div id="dropZone" class="drop-zone">将日志文件拖放到此处，或点击选择文件。
+            <input id="logFile" type="file" accept=".log,.txt" />
+        </div>
+        <div class="input-actions">
+            <button id="parseLogButton" type="button">提取并解析日志中的 0x57</button>
+        </div>
+        <div id="inputStatus" class="input-status">尚未解析。</div>
+        <div id="frameToolbar" class="frame-toolbar hidden">
+            <div class="view-mode" role="group" aria-label="报文列表筛选">
+                <button type="button" class="frame-filter active" data-mode="all">全部报文</button>
+                <button type="button" class="frame-filter" data-mode="fault">仅显示异常报文</button>
+            </div>
+            <span id="frameSummary" class="frame-summary"></span>
+        </div>
+        <div id="frameListWrap" class="frame-list-wrap hidden"><div id="frameList" class="frame-list"></div></div>
+    </section>
 
-<h1>SDM → BiIOM 全体机笼故障状态信息报文解析器 (MSG_ID=0x57)</h1>
+    <section id="infoSection" class="info-section hidden"></section>
 
-<p><strong>使用方法：</strong>把完整的十六进制报文（可带空格或不带）粘贴到下面文本框，点击“解析”。</p>
-
-<textarea id="hexInput" placeholder="例如：aa 05 93 57 19 0c 03 0d 0b 28 00 00 01 8a ..."></textarea>
-<br>
-<button onclick="parse()">解析报文</button>
-
-<div id="result"></div>
+    <section id="dataSection" class="data-section hidden">
+        <div class="data-header">
+            <h2>机笼与板卡详情</h2>
+            <div class="data-toolbar">
+                <div class="view-mode" role="group" aria-label="机笼信息筛选">
+                    <button type="button" class="cage-filter active" data-mode="all">全部机笼</button>
+                    <button type="button" class="cage-filter" data-mode="fault">仅显示异常</button>
+                    <button type="button" class="cage-filter" data-mode="absent">仅显示不在位</button>
+                </div>
+                <input id="cageSearch" class="data-search" type="search" placeholder="搜索机笼地址、板卡 ID 或状态">
+                <span id="dataSummary" class="data-summary"></span>
+            </div>
+            <div class="legend">
+                <span><i class="status-value normal">正常</i> 0x55</span>
+                <span><i class="status-value fault">异常</i> 0xAA</span>
+                <span><i class="status-value absent">不在位</i> 0x5A</span>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="cage-table">
+                <thead><tr><th>序号</th><th>机笼地址</th><th>机笼状态</th><th>板卡数量</th><th>板卡详情</th></tr></thead>
+                <tbody id="cageTableBody"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
 
 <script>
-    // 辅助函数：十六进制字符串转 Uint8Array
-    function hexToBytes(hex) {
-        hex = hex.replace(/[^0-9a-fA-F]/g, '');
-        if (hex.length % 2) hex = '0' + hex;
-        const bytes = new Uint8Array(hex.length / 2);
-        for (let i = 0; i < bytes.length; i++) {
-            bytes[i] = parseInt(hex.substr(i*2, 2), 16);
+    let selectedFrames = [];
+    let selectedIndex = 0;
+    let frameFilter = 'all';
+    let cageFilter = 'all';
+    let cageQuery = '';
+    let currentParsed = null;
+
+    const parseButton = document.getElementById('parseButton');
+    const parseLogButton = document.getElementById('parseLogButton');
+    const logFile = document.getElementById('logFile');
+    const clearButton = document.getElementById('clearButton');
+    const hexInput = document.getElementById('hexInput');
+    const dropZone = document.getElementById('dropZone');
+
+    parseButton.addEventListener('click', parseInput);
+    parseLogButton.addEventListener('click', () => readLogFile(logFile.files[0]));
+    logFile.addEventListener('change', () => readLogFile(logFile.files[0]));
+    clearButton.addEventListener('click', clearInput);
+    document.querySelectorAll('.frame-filter').forEach(button => button.addEventListener('click', () => {
+        frameFilter = button.dataset.mode;
+        updateFrameFilterButtons();
+        renderFrameList();
+    }));
+    document.querySelectorAll('.cage-filter').forEach(button => button.addEventListener('click', () => {
+        cageFilter = button.dataset.mode;
+        updateCageFilterButtons();
+        renderCageTable();
+    }));
+    document.getElementById('cageSearch').addEventListener('input', event => {
+        cageQuery = event.target.value.trim().toLowerCase();
+        renderCageTable();
+    });
+    dropZone.addEventListener('dragover', event => { event.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', event => {
+        event.preventDefault();
+        dropZone.classList.remove('dragover');
+        readLogFile(event.dataTransfer.files[0]);
+    });
+
+    function setInputStatus(message, type) {
+        const status = document.getElementById('inputStatus');
+        status.className = `input-status${type ? ` ${type}` : ''}`;
+        status.textContent = message;
+    }
+
+    function parseInput() {
+        const text = hexInput.value.trim();
+        if (!text) {
+            displayError('请输入十六进制报文或日志内容');
+            setInputStatus('解析失败：请输入十六进制报文或日志内容。', 'error');
+            return;
         }
+        try {
+            if (/\[\s*\d+\s+Bytes\s+bin\]/i.test(text) || /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+57\b/i.test(text)) {
+                parseLogText(text);
+                return;
+            }
+            showFrames([buildFrameEntry(parseHexInput(text))]);
+            setInputStatus('解析成功。', 'ok');
+        } catch (error) {
+            displayError(error.message || '报文格式无效');
+            setInputStatus(`解析失败：${error.message || '报文格式无效'}`, 'error');
+        }
+    }
+
+    function parseHexInput(text) {
+        const normalized = text.replace(/0x/gi, '').replace(/[\s,;:_-]+/g, '');
+        if (!normalized || !/^[0-9a-f]+$/i.test(normalized) || normalized.length % 2) throw new Error('无效的十六进制字符串，请检查是否包含非十六进制字符');
+        return hexToBytes(normalized);
+    }
+
+    function parseLogText(text) {
+        const lines = text.split(/\r?\n/);
+        const frames = [];
+        const marker = /\[\s*(\d+)\s+Bytes\s+bin\](.*)$/i;
+        const bare = /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+57\b/i;
+        lines.forEach(line => {
+            const timestamp = extractLogTimestamp(line);
+            const marked = line.match(marker);
+            let source = marked ? marked[2] : null;
+            if (!source) {
+                const start = line.search(bare);
+                if (start < 0) return;
+                source = line.slice(start);
+            }
+            const frameStart = source.search(bare);
+            if (frameStart >= 0) source = source.slice(frameStart);
+            extractFrames(hexBytes(source)).forEach(frame => frames.push(buildFrameEntry(frame, timestamp)));
+        });
+        if (!frames.length) throw new Error('未找到完整的 0x57 报文');
+        showFrames(frames);
+        setInputStatus(`日志提取成功：找到 ${frames.length} 条 0x57 报文。`, 'ok');
+    }
+
+    function extractLogTimestamp(line) {
+        const patterns = [
+            /\b(20\d{2}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}:\d{2}(?:[.,]\d{1,3})?)/,
+            /\b(20\d{2}\d{2}\d{2}[ T]\d{2}\d{2}\d{2}(?:[.,]\d{1,3})?)\b/,
+            /\b(\d{2}:\d{2}:\d{2}(?:[.,]\d{1,3})?)\b/
+        ];
+        for (const pattern of patterns) {
+            const match = line.match(pattern);
+            if (match) return match[1].replace(/\//g, '-').replace(',', '.');
+        }
+        return '时间未知';
+    }
+
+    function hexToBytes(hex) {
+        const bytes = [];
+        for (let index = 0; index < hex.length; index += 2) bytes.push(parseInt(hex.slice(index, index + 2), 16));
         return bytes;
     }
 
-    // CRC32 (IEEE 802.3) 计算
-    function crc32(buf) {
-        let crc = 0xFFFFFFFF;
-        const poly = 0xEDB88320;
-        for (let i = 0; i < buf.length; i++) {
-            crc ^= buf[i];
-            for (let j = 0; j < 8; j++) {
-                crc = (crc >>> 1) ^ (poly & (-(crc & 1)));
+    function hexBytes(text) { return ((text || '').match(/[0-9a-fA-F]{2}/g) || []).map(value => parseInt(value, 16)); }
+    function readU16(bytes, offset, order) { return order === 'le' ? bytes[offset] | (bytes[offset + 1] << 8) : (bytes[offset] << 8) | bytes[offset + 1]; }
+    function readU32(bytes, offset, order) {
+        const value = order === 'le'
+            ? bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)
+            : (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
+        return value >>> 0;
+    }
+
+    function resolveByteOrder(bytes) {
+        const bigLength = readU16(bytes, 1, 'be');
+        const littleLength = readU16(bytes, 1, 'le');
+        if (bigLength + 3 === bytes.length) return 'be';
+        if (littleLength + 3 === bytes.length) return 'le';
+        throw new Error(`LEN 与实际报文长度不匹配：LEN(大端)=${bigLength}，LEN(小端)=${littleLength}，实际=${bytes.length - 3}`);
+    }
+
+    function requireBytes(bytes, offset, count, name) {
+        if (offset + count > bytes.length) throw new Error(`${name}数据不完整，报文在第 ${offset + 1} 字节处截断`);
+    }
+
+    function parseMessage(bytes) {
+        if (bytes.length < 20) throw new Error(`报文长度不足：至少需要 20 字节，实际 ${bytes.length} 字节`);
+        if (bytes[0] !== 0xAA) throw new Error('帧头不是 0xAA');
+        if (bytes[3] !== 0x57) throw new Error('MSG_ID 不是 0x57');
+        const order = resolveByteOrder(bytes);
+        const len = readU16(bytes, 1, order);
+        let pos = 4;
+        requireBytes(bytes, pos, 10, '公共字段');
+        const stamp = { year: 2000 + bytes[pos++], month: bytes[pos++], day: bytes[pos++], hour: bytes[pos++], minute: bytes[pos++], second: bytes[pos++] };
+        const cbiId = readU32(bytes, pos, order);
+        pos += 4;
+        const cageNum = bytes[pos++];
+        const cages = [];
+        for (let cageIndex = 0; cageIndex < cageNum; cageIndex++) {
+            requireBytes(bytes, pos, 3, `第 ${cageIndex + 1} 个机笼`);
+            const cageAddr = bytes[pos++];
+            const cageStateByte = bytes[pos++];
+            const boardNum = bytes[pos++];
+            const boards = [];
+            for (let boardIndex = 0; boardIndex < boardNum; boardIndex++) {
+                requireBytes(bytes, pos, 10, `机笼 ${formatHex(cageAddr)} 的第 ${boardIndex + 1} 块板卡`);
+                const brdId = readU32(bytes, pos, order);
+                pos += 4;
+                const hoseByte = bytes[pos++];
+                const safeByte = bytes[pos++];
+                const reverse = bytes.slice(pos, pos + 4);
+                pos += 4;
+                boards.push({ brdId, hoseByte, safeByte, reverse });
             }
+            requireBytes(bytes, pos, 4, `机笼 ${formatHex(cageAddr)} 的预留字段`);
+            const reverse = bytes.slice(pos, pos + 4);
+            pos += 4;
+            cages.push({ cageAddr, cageStateByte, boards, reverse });
+        }
+        if (pos !== bytes.length - 5) throw new Error(`机笼数据结束位置异常：实际在第 ${pos + 1} 字节结束`);
+        const end = bytes[pos++];
+        if (end !== 0x55) throw new Error('帧尾不是 0x55');
+        const crc = readU32(bytes, pos, order);
+        const crcCalculated = crc32(bytes.slice(1, bytes.length - 4));
+        const result = { header: bytes[0], len, msgId: bytes[3], stamp, cbiId, cageNum, cages, end, crc, crcCalculated, crcOk: crc === crcCalculated, order };
+        result.faultCages = cages.filter(isFaultCage).length;
+        result.faultBoards = cages.reduce((sum, cage) => sum + cage.boards.filter(isFaultBoard).length, 0);
+        return result;
+    }
+
+    function extractFrames(bytes) {
+        const frames = [];
+        let pos = 0;
+        while (pos + 4 <= bytes.length) {
+            if (bytes[pos] !== 0xAA || bytes[pos + 3] !== 0x57) { pos++; continue; }
+            let total = 0;
+            for (const order of ['be', 'le']) {
+                const length = readU16(bytes, pos + 1, order);
+                if (length + 3 >= 20 && pos + length + 3 <= bytes.length && bytes[pos + length - 2] === 0x55) { total = length + 3; break; }
+            }
+            if (!total) { pos++; continue; }
+            const frame = bytes.slice(pos, pos + total);
+            try {
+                parseMessage(frame);
+                frames.push(frame);
+                pos += total;
+            } catch (error) { pos++; }
+        }
+        return frames;
+    }
+
+    function crc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        const polynomial = 0xEDB88320;
+        for (const byte of bytes) {
+            crc ^= byte;
+            for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (polynomial & -(crc & 1));
         }
         return (crc ^ 0xFFFFFFFF) >>> 0;
     }
 
-    function parse() {
-        const input = document.getElementById('hexInput').value.trim();
-        if (!input) {
-            document.getElementById('result').innerHTML = '<p class="error">请粘贴十六进制报文</p>';
-            return;
-        }
+    function buildFrameEntry(bytes, timestamp) {
+        const parsed = parseMessage(bytes);
+        return { bytes, parsed, timestamp: timestamp || '时间未知', hasFault: parsed.faultCages > 0 || parsed.faultBoards > 0 };
+    }
 
-        let data;
-        try {
-            data = hexToBytes(input);
-        } catch (e) {
-            document.getElementById('result').innerHTML = '<p class="error">十六进制格式错误</p>';
-            return;
-        }
+    function showFrames(frames) {
+        selectedFrames = frames.map(frame => frame && frame.bytes ? frame : buildFrameEntry(frame));
+        if (!selectedFrames.length) throw new Error('未找到完整的 0x57 报文');
+        selectedIndex = 0;
+        frameFilter = 'all';
+        updateFrameFilterButtons();
+        renderFrameList();
+        renderSelectedFrame();
+    }
 
-        let pos = 0;
-
-        // 1. HEADER
-        if (data[pos++] !== 0xAA) {
-            document.getElementById('result').innerHTML = '<p class="error">帧头不是 0xAA</p>';
-            return;
-        }
-
-        // 2. LEN (2字节，小端)
-        const len = data[pos++] | (data[pos++] << 8);
-
-        // 3. MSG_ID
-        if (data[pos++] !== 0x57) {
-            document.getElementById('result').innerHTML = '<p class="error">MSG_ID 不是 0x57</p>';
-            return;
-        }
-
-        // 4. 时间戳 6字节
-        const year  = data[pos++] + 2000;
-        const month = data[pos++];
-        const day   = data[pos++];
-        const hour  = data[pos++];
-        const minute= data[pos++];
-        const second= data[pos++];
-
-        // 5. CBI_ID 4字节 (小端)
-        const cbiId = data[pos++] | (data[pos++] << 8) | (data[pos++] << 16) | (data[pos++] << 24);
-
-        // 6. 机笼个数 N1
-        const cageNum = data[pos++];
-
-        const cages = [];
-
-        for (let c = 0; c < cageNum; c++) {
-            // CAGE_ADDR
-            const cageAddr = data[pos++];
-            // CAGE_STATE
-            const cageStateByte = data[pos++];
-            const cageState = cageStateByte === 0x55 ? '正常' :
-                cageStateByte === 0xAA ? '异常' :
-                    cageStateByte === 0x5A ? '不在位' : '未知';
-
-            // BOARD_NUM
-            const boardNum = data[pos++];
-
-            const boards = [];
-            for (let b = 0; b < boardNum; b++) {
-                // BRD_ID (4字节，小端)
-                const brdId = data[pos++] | (data[pos++] << 8) | (data[pos++] << 16) | (data[pos++] << 24);
-                // HOSE_STATE
-                const hoseByte = data[pos++];
-                const hoseState = hoseByte === 0x55 ? '主机' : hoseByte === 0xAA ? '备机' : '未知';
-                // SAFE_STATE
-                const safeByte = data[pos++];
-                const safeState = safeByte === 0x55 ? '不导向安全' :
-                    safeByte === 0xAA ? '导向安全' :
-                        safeByte === 0x5A ? '单板不在位' : '未知';
-                // REVERSE 4字节 跳过
-                pos += 4;
-
-                boards.push({ brdId, hoseState, safeState });
-            }
-
-            // REVERSE 4字节（机笼预留）
-            pos += 4;
-
-            cages.push({ cageAddr, cageState, cageStateByte, boards });
-        }
-
-        // END
-        if (data[pos++] !== 0x55) {
-            document.getElementById('result').innerHTML = '<p class="error">帧尾不是 0x55</p>';
-            return;
-        }
-
-        // CRC 校验（从 LEN 开始到 END 结束）
-        const crcReported = data[pos++] | (data[pos++] << 8) | (data[pos++] << 16) | (data[pos++] << 24);
-        const crcRange = data.slice(1, pos - 5); // LEN 到 END（不包含 END 和 CRC）
-        const crcCalc = crc32(crcRange);
-
-        const crcOk = crcCalc === crcReported;
-
-        // 输出结果
-        let html = `
-    <h2>解析成功！</h2>
-    <p><strong>时间：</strong>${year}年${month.toString().padStart(2,0)}月${day.toString().padStart(2,0)}日 ${hour.toString().padStart(2,0)}:${minute.toString().padStart(2,0)}:${second.toString().padStart(2,0)}</p>
-    <p><strong>联锁集中站编号（CBI_ID）：</strong>${cbiId}</p>
-    <p><strong>CRC 校验：</strong>${crcOk ? '<span style="color:green">通过</span>' : '<span style="color:red">失败（计算值 0x'+crcCalc.toString(16).padStart(8,'0').toUpperCase()+'，报文值 0x'+crcReported.toString(16).padStart(8,'0').toUpperCase()+'）</span>'}</p>
-    <h3>机笼信息（共 ${cageNum} 个）</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>机笼地址</th>
-          <th>机笼状态</th>
-          <th>单板数量</th>
-          <th>单板详情</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-
-        cages.forEach(c => {
-            const stateClass = c.cageStateByte === 0x55 ? 'normal' :
-                c.cageStateByte === 0xAA ? 'fault' : 'absent';
-
-            let boardHtml = '<table style="width:100%;font-size:90%;"><tr><th>板卡ID</th><th>主备</th><th>安全状态</th></tr>';
-            c.boards.forEach(b => {
-                const hoseClass = b.hoseState === '主机' ? 'normal' : 'fault';
-                const safeClass = b.safeState === '不导向安全' ? 'normal' :
-                    b.safeState === '导向安全' ? 'fault' : 'absent';
-                boardHtml += `<tr>
-        <td>${b.brdId}</td>
-        <td class="${hoseClass}">${b.hoseState}</td>
-        <td class="${safeClass}">${b.safeState}</td>
-      </tr>`;
-            });
-            boardHtml += '</table>';
-
-            html += `
-      <tr class="${stateClass}">
-        <td>0x${c.cageAddr.toString(16).toUpperCase().padStart(2,'0')}</td>
-        <td>${c.cageState}</td>
-        <td>${c.boards.length}</td>
-        <td style="text-align:left;">${boardHtml}</td>
-      </tr>
-    `;
+    function getVisibleFrames() { return selectedFrames.map((entry, index) => ({ entry, index })).filter(item => frameFilter !== 'fault' || item.entry.hasFault); }
+    function renderFrameList() {
+        const toolbar = document.getElementById('frameToolbar');
+        const wrap = document.getElementById('frameListWrap');
+        const list = document.getElementById('frameList');
+        if (!selectedFrames.length) { toolbar.classList.add('hidden'); wrap.classList.add('hidden'); list.innerHTML = ''; return; }
+        const visible = getVisibleFrames();
+        if (!visible.some(item => item.index === selectedIndex) && visible.length) { selectedIndex = visible[0].index; renderSelectedFrame(); }
+        toolbar.classList.remove('hidden');
+        wrap.classList.remove('hidden');
+        list.innerHTML = '';
+        if (!visible.length) list.innerHTML = '<div class="frame-empty">没有包含异常机笼或板卡的报文</div>';
+        visible.forEach(item => {
+            const button = document.createElement('button');
+            const parsed = item.entry.parsed;
+            button.type = 'button';
+            button.dataset.frameIndex = String(item.index);
+            button.textContent = `帧 ${item.index + 1} | ${item.entry.timestamp} | ${item.entry.bytes.length} 字节 | 机笼 ${parsed.cageNum} 个 | ${item.entry.hasFault ? `异常机笼 ${parsed.faultCages} 个，异常板卡 ${parsed.faultBoards} 块` : '无异常'}`;
+            button.addEventListener('click', () => { selectedIndex = item.index; renderSelectedFrame(); updateFrameButtons(); });
+            list.appendChild(button);
         });
+        const faultCount = selectedFrames.filter(entry => entry.hasFault).length;
+        document.getElementById('frameSummary').textContent = `显示 ${visible.length}/${selectedFrames.length} 条，其中异常 ${faultCount} 条`;
+        updateFrameButtons();
+    }
 
-        html += `
-      </tbody>
-    </table>
-  `;
+    function renderSelectedFrame() {
+        const entry = selectedFrames[selectedIndex];
+        if (!entry) return;
+        currentParsed = entry.parsed;
+        displayInfo(currentParsed, entry.timestamp);
+        document.getElementById('dataSection').classList.remove('hidden');
+        renderCageTable();
+    }
 
-        document.getElementById('result').innerHTML = html;
+    function displayInfo(parsed, logTimestamp) {
+        const crcClass = parsed.crcOk ? 'crc-ok' : 'crc-error';
+        const crcText = parsed.crcOk ? `通过（${formatHex32(parsed.crc)}）` : `失败（报文 ${formatHex32(parsed.crc)}，计算 ${formatHex32(parsed.crcCalculated)}）`;
+        const section = document.getElementById('infoSection');
+        section.classList.remove('hidden');
+        section.innerHTML = `<h3>报文详情</h3><dl class="info-grid">
+            <div class="info-item"><dt>日志时间：</dt><dd>${escapeHtml(logTimestamp || '时间未知')}</dd></div>
+            <div class="info-item"><dt>帧头：</dt><dd>${formatHex(parsed.header)}</dd></div>
+            <div class="info-item"><dt>帧长度（LEN）：</dt><dd>${parsed.len} 字节</dd></div>
+            <div class="info-item"><dt>消息 ID：</dt><dd>${formatHex(parsed.msgId)}</dd></div>
+            <div class="info-item"><dt>字段字节序：</dt><dd>${parsed.order === 'le' ? '小端' : '大端'}</dd></div>
+            <div class="info-item"><dt>报文时间戳：</dt><dd>${formatStamp(parsed.stamp)}</dd></div>
+            <div class="info-item"><dt>联锁站编号（CBI_ID）：</dt><dd>${parsed.cbiId}</dd></div>
+            <div class="info-item"><dt>机笼数量：</dt><dd>${parsed.cageNum}</dd></div>
+            <div class="info-item"><dt>异常机笼：</dt><dd>${parsed.faultCages} 个</dd></div>
+            <div class="info-item"><dt>异常板卡：</dt><dd>${parsed.faultBoards} 块</dd></div>
+            <div class="info-item"><dt>帧尾：</dt><dd>${formatHex(parsed.end)}</dd></div>
+            <div class="info-item"><dt>CRC 校验：</dt><dd class="${crcClass}">${crcText}</dd></div>
+        </dl>`;
+    }
+
+    function renderCageTable() {
+        if (!currentParsed) return;
+        const cages = currentParsed.cages.map((cage, index) => ({ cage, index }))
+            .filter(item => cageFilter === 'all' || (cageFilter === 'fault' && isFaultCage(item.cage)) || (cageFilter === 'absent' && item.cage.cageStateByte === 0x5A))
+            .filter(item => !cageQuery || getCageSearchText(item.cage).includes(cageQuery));
+        const tbody = document.getElementById('cageTableBody');
+        tbody.innerHTML = '';
+        if (!cages.length) tbody.innerHTML = '<tr><td colspan="5" class="frame-empty">没有符合条件的机笼</td></tr>';
+        cages.forEach(({ cage, index }) => {
+            const row = document.createElement('tr');
+            const state = getCageState(cage.cageStateByte);
+            const boardHtml = cage.boards.length ? `<details><summary>查看 ${cage.boards.length} 块板卡</summary>${renderBoardList(cage.boards)}</details>` : '<span class="board-empty">无板卡</span>';
+            row.innerHTML = `<td>${index + 1}</td>
+                <td>${formatHex(cage.cageAddr)}<br><span class="raw-value">原始值 ${formatHex(cage.cageAddr)}</span></td>
+                <td><span class="status-value ${state.className}">${state.label}</span><br><span class="raw-value">原始值 ${formatHex(cage.cageStateByte)}</span></td>
+                <td>${cage.boards.length}</td><td>${boardHtml}</td>`;
+            tbody.appendChild(row);
+        });
+        const totalBoards = currentParsed.cages.reduce((sum, cage) => sum + cage.boards.length, 0);
+        document.getElementById('dataSummary').textContent = `显示 ${cages.length}/${currentParsed.cages.length} 个机笼，共 ${totalBoards} 块板卡；异常机笼 ${currentParsed.faultCages} 个，异常板卡 ${currentParsed.faultBoards} 块`;
+    }
+
+    function renderBoardList(boards) {
+        return `<div class="board-list"><div class="board-row board-head"><span>序号</span><span>板卡 ID</span><span>主备状态</span><span>安全状态</span></div>${boards.map((board, index) => {
+            const hose = getHoseState(board.hoseByte);
+            const safe = getSafeState(board.safeByte);
+            return `<div class="board-row"><span>${index + 1}</span><span>${board.brdId}<br><span class="raw-value">原始字节 ${formatBytes(board.brdId, currentParsed.order)}</span></span><span><span class="status-value ${hose.className}">${hose.label}</span><br><span class="raw-value">${formatHex(board.hoseByte)}</span></span><span><span class="status-value ${safe.className}">${safe.label}</span><br><span class="raw-value">${formatHex(board.safeByte)}</span></span></div>`;
+        }).join('')}</div>`;
+    }
+
+    function getCageSearchText(cage) {
+        const state = getCageState(cage.cageStateByte);
+        return [formatHex(cage.cageAddr), cage.cageAddr, state.label, formatHex(cage.cageStateByte), ...cage.boards.flatMap(board => [board.brdId, getHoseState(board.hoseByte).label, getSafeState(board.safeByte).label])].join(' ').toLowerCase();
+    }
+    function getCageState(value) { if (value === 0x55) return { label: '正常', className: 'normal' }; if (value === 0xAA) return { label: '异常', className: 'fault' }; if (value === 0x5A) return { label: '不在位', className: 'absent' }; return { label: '未知', className: 'unknown' }; }
+    function getHoseState(value) { if (value === 0x55) return { label: '主机', className: 'normal' }; if (value === 0xAA) return { label: '备机', className: 'fault' }; return { label: '未知', className: 'unknown' }; }
+    function getSafeState(value) { if (value === 0x55) return { label: '不导向安全', className: 'normal' }; if (value === 0xAA) return { label: '导向安全', className: 'fault' }; if (value === 0x5A) return { label: '单板不在位', className: 'absent' }; return { label: '未知', className: 'unknown' }; }
+    function isFaultBoard(board) { return board.hoseByte !== 0x55 || board.safeByte !== 0x55; }
+    function isFaultCage(cage) { return cage.cageStateByte !== 0x55 || cage.boards.some(isFaultBoard); }
+    function formatHex(value) { return `0x${Number(value).toString(16).padStart(2, '0').toUpperCase()}`; }
+    function formatHex32(value) { return `0x${Number(value >>> 0).toString(16).padStart(8, '0').toUpperCase()}`; }
+    function formatBytes(value, order) { const bytes = order === 'le' ? [value & 0xFF, (value >>> 8) & 0xFF, (value >>> 16) & 0xFF, (value >>> 24) & 0xFF] : [(value >>> 24) & 0xFF, (value >>> 16) & 0xFF, (value >>> 8) & 0xFF, value & 0xFF]; return bytes.map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' '); }
+    function formatStamp(stamp) { return `${stamp.year}-${String(stamp.month).padStart(2, '0')}-${String(stamp.day).padStart(2, '0')} ${String(stamp.hour).padStart(2, '0')}:${String(stamp.minute).padStart(2, '0')}:${String(stamp.second).padStart(2, '0')}`; }
+    function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character])); }
+    function updateFrameButtons() { document.querySelectorAll('#frameList button[data-frame-index]').forEach(button => button.classList.toggle('active', Number(button.dataset.frameIndex) === selectedIndex)); }
+    function updateFrameFilterButtons() { document.querySelectorAll('.frame-filter').forEach(button => button.classList.toggle('active', button.dataset.mode === frameFilter)); }
+    function updateCageFilterButtons() { document.querySelectorAll('.cage-filter').forEach(button => button.classList.toggle('active', button.dataset.mode === cageFilter)); }
+
+    function readLogFile(file) {
+        if (!file) { setInputStatus('请先选择日志文件。', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = event => { hexInput.value = event.target.result; try { parseLogText(event.target.result); } catch (error) { displayError(error.message || '日志格式无效'); setInputStatus(`日志解析失败：${error.message || '日志格式无效'}`, 'error'); } };
+        reader.onerror = () => setInputStatus('日志文件读取失败。', 'error');
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    function clearInput() {
+        hexInput.value = '';
+        logFile.value = '';
+        selectedFrames = [];
+        selectedIndex = 0;
+        currentParsed = null;
+        frameFilter = 'all';
+        cageFilter = 'all';
+        cageQuery = '';
+        document.getElementById('cageSearch').value = '';
+        document.getElementById('frameList').innerHTML = '';
+        document.getElementById('frameToolbar').classList.add('hidden');
+        document.getElementById('frameListWrap').classList.add('hidden');
+        document.getElementById('infoSection').classList.add('hidden');
+        document.getElementById('dataSection').classList.add('hidden');
+        updateFrameFilterButtons();
+        updateCageFilterButtons();
+        setInputStatus('尚未解析。', '');
+    }
+
+    function displayError(message) {
+        selectedFrames = [];
+        currentParsed = null;
+        document.getElementById('frameList').innerHTML = '';
+        document.getElementById('frameToolbar').classList.add('hidden');
+        document.getElementById('frameListWrap').classList.add('hidden');
+        document.getElementById('dataSection').classList.add('hidden');
+        const section = document.getElementById('infoSection');
+        section.classList.remove('hidden');
+        section.innerHTML = `<span class="error">错误：${escapeHtml(message)}</span>`;
     }
 </script>
-
-<p><small>支持带空格、不带空格、换行等常见复制格式。<br>
-    状态颜色说明：绿色=正常(0x55)，红色=异常/备机/导向安全(0xAA)，黄色=不在位(0x5A)</small></p>
-
 </body>
 </html>
