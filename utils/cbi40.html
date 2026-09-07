@@ -89,6 +89,13 @@
             margin-top: 8px;
             max-width: 100%;
         }
+        .config-row .drop-zone {
+            flex: 1 1 420px;
+            margin-top: 0;
+        }
+        .config-row .drop-zone input[type=file] {
+            margin-top: 6px;
+        }
         .input-status {
             margin-top: 12px;
             padding: 9px 11px;
@@ -101,19 +108,47 @@
         .input-status.error { background: #fdecec; color: #a12626; }
         .frame-list {
             display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 12px;
+            flex-direction: column;
+            gap: 6px;
         }
         .frame-list button {
-            padding: 7px 11px;
+            width: 100%;
+            padding: 8px 11px;
             border: 1px solid #b9cde0;
             border-radius: 5px;
             background: #e8f0f7;
             color: #164a7b;
             cursor: pointer;
+            text-align: left;
+            font-size: .9rem;
         }
         .frame-list button.active { background: #1769aa; color: white; }
+        .frame-empty {
+            padding: 18px;
+            color: #71808c;
+            text-align: center;
+        }
+        .frame-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+        }
+        .frame-summary {
+            margin-left: auto;
+            color: #667580;
+            font-size: .85rem;
+        }
+        .frame-list-wrap {
+            max-height: 360px;
+            overflow-y: auto;
+            margin-top: 8px;
+            padding: 2px;
+            border: 1px solid #d9e0e5;
+            border-radius: 6px;
+            background: #fbfcfd;
+        }
         .hidden { display: none !important; }
         #parseButton {
             padding: 12px 30px;
@@ -340,11 +375,17 @@
                 width: 100%;
                 margin-left: 0;
             }
+            .frame-summary {
+                width: 100%;
+                margin-left: 0;
+            }
+            .frame-list-wrap { max-height: 280px; }
             .config-row input,
             #loadConfigButton {
                 width: 100%;
                 min-width: 0;
             }
+            .config-row .drop-zone { flex-basis: 100%; }
         }
     </style>
 </head>
@@ -355,7 +396,9 @@
         <div class="config-section">
             <strong>大排队位定义（可选）</strong>
             <div class="config-row">
-                <input type="file" id="configFile" multiple accept=".xml,.json,.txt,.csv,.tsv,application/xml,text/xml,application/json,text/plain,text/csv">
+                <div id="configDropZone" class="drop-zone">将配置文件拖放到此处，或点击选择文件。
+                    <input type="file" id="configFile" multiple accept=".xml,.json,.txt,.csv,.tsv,application/xml,text/xml,application/json,text/plain,text/csv">
+                </div>
                 <button type="button" id="loadConfigButton">加载配置</button>
             </div>
             <small>支持 cbi_agent 的 XML 配置（可多选：StateAlarmIndexTable、BoardAlarmsIndexTable、CommAlarmsIndexTable、IOAlarmsIndexTable、CSMStatusIndexTable），也支持 JSON 或按行填写：alarm,位序号,含义 / state,位序号,含义。</small>
@@ -375,7 +418,16 @@
             <button id="parseLogButton" type="button">提取并解析日志中的 0x40</button>
         </div>
         <div id="inputStatus" class="input-status">尚未解析。</div>
-        <div id="frameList" class="frame-list"></div>
+        <div id="frameToolbar" class="frame-toolbar hidden">
+            <div class="view-mode" role="group" aria-label="报文列表筛选">
+                <button type="button" class="frame-filter active" data-mode="all">全部报文</button>
+                <button type="button" class="frame-filter" data-mode="alarm">仅显示包含报警</button>
+            </div>
+            <span id="frameSummary" class="frame-summary"></span>
+        </div>
+        <div class="frame-list-wrap hidden" id="frameListWrap">
+            <div id="frameList" class="frame-list"></div>
+        </div>
     </div>
     <div class="info-section" id="infoSection"></div>
     <div class="data-section" id="dataSection">
@@ -423,6 +475,8 @@
     let currentParsed = null;
     let selectedFrames = [];
     let selectedIndex = 0;
+    let frameFilter = 'all';
+    let pendingConfigFiles = [];
     let activeDataType = 'alarm';
     const viewState = {
         alarm: { mode: 'all', query: '' },
@@ -434,6 +488,24 @@
     document.getElementById('logFile').addEventListener('change', parseLogFile);
     document.getElementById('clearButton').addEventListener('click', clearInput);
     document.getElementById('loadConfigButton').addEventListener('click', loadBitConfig);
+    document.getElementById('configFile').addEventListener('change', event => loadBitConfig(event.target.files));
+    document.querySelectorAll('.frame-filter').forEach(button => {
+        button.addEventListener('click', () => {
+            frameFilter = button.dataset.mode;
+            updateFrameFilterButtons();
+            const previousIndex = selectedIndex;
+            renderFrameList();
+            if (selectedIndex !== previousIndex) renderSelectedFrame();
+        });
+    });
+    const configDropZone = document.getElementById('configDropZone');
+    configDropZone.addEventListener('dragover', event => { event.preventDefault(); configDropZone.classList.add('dragover'); });
+    configDropZone.addEventListener('dragleave', () => configDropZone.classList.remove('dragover'));
+    configDropZone.addEventListener('drop', event => {
+        event.preventDefault();
+        configDropZone.classList.remove('dragover');
+        loadBitConfig(event.dataTransfer.files);
+    });
     const dropZone = document.getElementById('dropZone');
     dropZone.addEventListener('dragover', event => { event.preventDefault(); dropZone.classList.add('dragover'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
@@ -476,17 +548,23 @@
         });
     }
 
-    function loadBitConfig() {
+    function loadBitConfig(fileList) {
         const input = document.getElementById('configFile');
         const status = document.getElementById('configStatus');
-        if (!input.files.length) {
+        const files = fileList !== undefined
+            ? Array.from(fileList)
+            : Array.from(input.files.length ? input.files : pendingConfigFiles);
+        if (!files.length) {
+            pendingConfigFiles = [];
             bitConfig = null;
             status.className = '';
             status.textContent = '未选择配置文件，解析时仅显示原始位值。';
             return;
         }
 
-        const files = Array.from(input.files);
+        pendingConfigFiles = files;
+        status.className = '';
+        status.textContent = `正在读取 ${files.length} 个配置文件...`;
         Promise.all(files.map(file => readConfigFile(file))).then(documents => {
             try {
                 bitConfig = buildBitConfig(documents);
@@ -740,6 +818,7 @@
         const marker = /\[\s*(\d+)\s+Bytes\s+bin\](.*)$/i;
         const bare = /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+40\b/i;
         lines.forEach(line => {
+            const timestamp = extractLogTimestamp(line);
             const match = line.match(marker);
             let source = match ? match[2] : null;
             if (!source) {
@@ -747,12 +826,27 @@
                 if (at < 0) return;
                 source = line.slice(at);
             }
+            const frameStart = source.search(bare);
+            if (frameStart >= 0) source = source.slice(frameStart);
             const bytes = hexBytes(source);
-            extractFrames(bytes).forEach(frame => frames.push(frame));
+            extractFrames(bytes).forEach(frame => frames.push(buildFrameEntry(frame, timestamp)));
         });
         if (!frames.length) throw new Error('未找到完整的 0x40 报文');
         showFrames(frames);
         setInputStatus(`日志提取成功：找到 ${frames.length} 条 0x40 报文。`, 'ok');
+    }
+
+    function extractLogTimestamp(line) {
+        const patterns = [
+            /\b(20\d{2}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}:\d{2}(?:[.,]\d{1,3})?)/,
+            /\b(20\d{2}\d{2}\d{2}[ T]\d{2}\d{2}\d{2}(?:[.,]\d{1,3})?)\b/,
+            /\b(\d{2}:\d{2}:\d{2}(?:[.,]\d{1,3})?)\b/
+        ];
+        for (const pattern of patterns) {
+            const match = line.match(pattern);
+            if (match) return match[1].replace(/\//g, '-').replace(',', '.');
+        }
+        return '时间未知';
     }
 
     function hexBytes(text) {
@@ -776,39 +870,101 @@
         return frames;
     }
 
-    function showFrames(frames) {
-        selectedFrames = frames;
-        selectedIndex = 0;
-        const frameList = document.getElementById('frameList');
-        frameList.innerHTML = '';
-        if (!frames.length) throw new Error('未找到 0x40 报文');
-        frames.forEach((bytes, index) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.textContent = `帧 ${index + 1}（${bytes.length} 字节）`;
-            button.addEventListener('click', () => {
-                selectedIndex = index;
-                renderSelectedFrame();
-                updateFrameButtons();
-            });
-            frameList.appendChild(button);
+    function countActiveBits(bytes) {
+        let count = 0;
+        bytes.forEach(byte => {
+            for (let bit = 0; bit < 8; bit++) count += (byte >> bit) & 1;
         });
-        updateFrameButtons();
+        return count;
+    }
+
+    function buildFrameEntry(bytes, timestamp) {
+        const parsed = parseMessageData(bytes);
+        const alarmBits = countActiveBits(parsed.alarmData);
+        return {
+            bytes,
+            parsed,
+            timestamp: timestamp || '时间未知',
+            alarmBits,
+            hasAlarm: alarmBits > 0
+        };
+    }
+
+    function showFrames(frames) {
+        selectedFrames = frames.map(frame => frame && frame.bytes ? frame : buildFrameEntry(frame));
+        selectedIndex = 0;
+        frameFilter = 'all';
+        if (!selectedFrames.length) throw new Error('未找到 0x40 报文');
+        updateFrameFilterButtons();
+        renderFrameList();
         renderSelectedFrame();
     }
 
+    function getVisibleFrames() {
+        return selectedFrames
+            .map((entry, index) => ({ entry, index }))
+            .filter(item => frameFilter !== 'alarm' || item.entry.hasAlarm);
+    }
+
+    function renderFrameList() {
+        const toolbar = document.getElementById('frameToolbar');
+        const wrap = document.getElementById('frameListWrap');
+        const frameList = document.getElementById('frameList');
+        if (!selectedFrames.length) {
+            toolbar.classList.add('hidden');
+            wrap.classList.add('hidden');
+            frameList.innerHTML = '';
+            return;
+        }
+        toolbar.classList.remove('hidden');
+        wrap.classList.remove('hidden');
+        const visible = getVisibleFrames();
+        const selectedVisible = visible.some(item => item.index === selectedIndex);
+        if (!selectedVisible && visible.length) selectedIndex = visible[0].index;
+        frameList.innerHTML = '';
+        if (!visible.length) {
+            frameList.innerHTML = '<div class="frame-empty">没有包含报警的报文</div>';
+        } else {
+            visible.forEach(item => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.dataset.frameIndex = String(item.index);
+                button.textContent = formatFrameLabel(item.index, item.entry);
+                button.addEventListener('click', () => {
+                    selectedIndex = item.index;
+                    renderSelectedFrame();
+                    updateFrameButtons();
+                });
+                frameList.appendChild(button);
+            });
+        }
+        document.getElementById('frameSummary').textContent = `显示 ${visible.length}/${selectedFrames.length} 条，其中含报警 ${selectedFrames.filter(entry => entry.hasAlarm).length} 条`;
+        updateFrameButtons();
+    }
+
+    function formatFrameLabel(index, entry) {
+        const alarmLabel = entry.hasAlarm ? `报警 ${entry.alarmBits} 位` : '无报警';
+        return `帧 ${index + 1} | ${entry.timestamp} | ${entry.bytes.length} 字节 | ${alarmLabel}`;
+    }
+
     function updateFrameButtons() {
-        Array.from(document.getElementById('frameList').children).forEach((button, index) => {
-            button.classList.toggle('active', index === selectedIndex);
+        document.querySelectorAll('#frameList button[data-frame-index]').forEach(button => {
+            button.classList.toggle('active', Number(button.dataset.frameIndex) === selectedIndex);
+        });
+    }
+
+    function updateFrameFilterButtons() {
+        document.querySelectorAll('.frame-filter').forEach(button => {
+            button.classList.toggle('active', button.dataset.mode === frameFilter);
         });
     }
 
     function renderSelectedFrame() {
-        const bytes = selectedFrames[selectedIndex];
-        if (!bytes) return;
-        if (!validateMessage(bytes)) throw new Error('报文格式无效');
-        currentParsed = parseMessageData(bytes);
-        displayInfo(currentParsed);
+        const entry = selectedFrames[selectedIndex];
+        if (!entry) return;
+        if (!validateMessage(entry.bytes)) throw new Error('报文格式无效');
+        currentParsed = entry.parsed || parseMessageData(entry.bytes);
+        displayInfo(currentParsed, entry.timestamp);
         updateDataTabCounts(currentParsed);
         renderAllDataTables();
     }
@@ -838,8 +994,12 @@
         document.getElementById('hexInput').value = '';
         document.getElementById('logFile').value = '';
         document.getElementById('frameList').innerHTML = '';
+        document.getElementById('frameToolbar').classList.add('hidden');
+        document.getElementById('frameListWrap').classList.add('hidden');
         selectedFrames = [];
         currentParsed = null;
+        frameFilter = 'all';
+        updateFrameFilterButtons();
         document.getElementById('infoSection').innerHTML = '';
         document.querySelector('#alarmTable tbody').innerHTML = '';
         document.querySelector('#stateTable tbody').innerHTML = '';
@@ -892,10 +1052,11 @@
         return result;
     }
 
-    function displayInfo(parsed) {
+    function displayInfo(parsed, logTimestamp) {
         const infoSection = document.getElementById('infoSection');
         infoSection.innerHTML = `
             <strong>报文详情：</strong><br>
+            日志时间：${logTimestamp || '时间未知'}<br>
             帧头（HEADER）：0x${parsed.header.toString(16).padStart(2, '0').toUpperCase()}<br>
             帧长度（LEN）：${parsed.len} 字节<br>
             消息ID（MSG_ID）：0x${parsed.msgId.toString(16).padStart(2, '0').toUpperCase()}<br>
@@ -982,7 +1143,11 @@
         currentParsed = null;
         selectedFrames = [];
         selectedIndex = 0;
+        frameFilter = 'all';
         document.getElementById('frameList').innerHTML = '';
+        document.getElementById('frameToolbar').classList.add('hidden');
+        document.getElementById('frameListWrap').classList.add('hidden');
+        updateFrameFilterButtons();
         const infoSection = document.getElementById('infoSection');
         infoSection.innerHTML = `<span class="error">错误：${message}</span>`;
         document.querySelector('#alarmTable tbody').innerHTML = '';
