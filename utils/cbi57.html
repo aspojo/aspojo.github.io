@@ -202,16 +202,21 @@
             return;
         }
         try {
-            if (/\[\s*\d+\s+Bytes\s+bin\]/i.test(text) || /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+57\b/i.test(text)) {
+            if (isPlainHexInput(text)) {
+                showFrames([buildFrameEntry(parseHexInput(text))]);
+                setInputStatus('解析成功。', 'ok');
+            } else {
                 parseLogText(text);
-                return;
             }
-            showFrames([buildFrameEntry(parseHexInput(text))]);
-            setInputStatus('解析成功。', 'ok');
         } catch (error) {
             displayError(error.message || '报文格式无效');
             setInputStatus(`解析失败：${error.message || '报文格式无效'}`, 'error');
         }
+    }
+
+    function isPlainHexInput(text) {
+        const normalized = text.replace(/0x/gi, '').replace(/[\s,;:_-]+/g, '');
+        return Boolean(normalized) && /^[0-9a-f]+$/i.test(normalized) && normalized.length % 2 === 0;
     }
 
     function parseHexInput(text) {
@@ -223,12 +228,14 @@
     function parseLogText(text) {
         const lines = text.split(/\r?\n/);
         const frames = [];
+        const incomplete = [];
         const marker = /\[\s*(\d+)\s+Bytes\s+bin\](.*)$/i;
         const bare = /\baa\s+[0-9a-f]{2}\s+[0-9a-f]{2}\s+57\b/i;
         lines.forEach(line => {
             const timestamp = extractLogTimestamp(line);
             const marked = line.match(marker);
             let source = marked ? marked[2] : null;
+            const declaredLength = marked ? Number(marked[1]) : null;
             if (!source) {
                 const start = line.search(bare);
                 if (start < 0) return;
@@ -236,9 +243,29 @@
             }
             const frameStart = source.search(bare);
             if (frameStart >= 0) source = source.slice(frameStart);
-            extractFrames(hexBytes(source)).forEach(frame => frames.push(buildFrameEntry(frame, timestamp)));
+            const bytes = hexBytes(source);
+            const messageStart = bytes.findIndex((value, index) => value === 0xAA && bytes[index + 3] === 0x57);
+            if (messageStart >= 0) {
+                const actual = bytes.length - messageStart;
+                const lenExpected = readU16(bytes, messageStart + 1, 'be') + 3;
+                if ((declaredLength !== null && actual !== declaredLength) || actual < lenExpected) {
+                    incomplete.push({ actual, declared: declaredLength, expected: Math.max(declaredLength || 0, lenExpected), lenExpected });
+                    return;
+                }
+            }
+            extractFrames(bytes).forEach(frame => frames.push(buildFrameEntry(frame, timestamp)));
         });
-        if (!frames.length) throw new Error('未找到完整的 0x57 报文');
+        if (!frames.length) {
+            if (incomplete.length) {
+                const issue = incomplete[0];
+                const expected = issue.declared || issue.lenExpected;
+                const detail = issue.declared
+                    ? `日志声明 ${issue.declared} 字节，实际仅提取 ${issue.actual} 字节`
+                    : `实际 ${issue.actual} 字节，按 LEN 应为 ${expected} 字节`;
+                throw new Error(`发现不完整的 0x57 报文：${detail}，缺少 ${Math.max(0, expected - issue.actual)} 字节`);
+            }
+            throw new Error('未找到完整的 0x57 报文');
+        }
         showFrames(frames);
         setInputStatus(`日志提取成功：找到 ${frames.length} 条 0x57 报文。`, 'ok');
     }
@@ -276,7 +303,9 @@
         const littleLength = readU16(bytes, 1, 'le');
         if (bigLength + 3 === bytes.length) return 'be';
         if (littleLength + 3 === bytes.length) return 'le';
-        throw new Error(`LEN 与实际报文长度不匹配：LEN(大端)=${bigLength}，LEN(小端)=${littleLength}，实际=${bytes.length - 3}`);
+        const expected = bigLength + 3;
+        const missing = expected > bytes.length ? `，缺少 ${expected - bytes.length} 字节` : '';
+        throw new Error(`LEN 与实际报文长度不匹配：LEN(大端)=${bigLength}，LEN(小端)=${littleLength}，实际总长度=${bytes.length} 字节（LEN 口径为 ${bytes.length - 3} 字节），按大端应为 ${expected} 字节${missing}`);
     }
 
     function requireBytes(bytes, offset, count, name) {
