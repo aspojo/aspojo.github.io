@@ -20,7 +20,7 @@
             margin-bottom: 18px;
             padding: 20px;
             border: 1px solid #dce3ee;
-            border-radius: 12px;
+            border-radius: 8px;
             background: #fff;
             box-shadow: 0 5px 18px rgba(31, 49, 79, .06);
         }
@@ -45,6 +45,27 @@
         }
         .primary { color: #fff; background: #2563eb; }
         .secondary { color: #263244; background: #e8edf5; }
+        button:disabled { cursor: not-allowed; opacity: .55; }
+        input, select {
+            min-height: 40px;
+            padding: 8px 10px;
+            border: 1px solid #b9c5d6;
+            border-radius: 7px;
+            color: #172033;
+            background: #fff;
+        }
+        input[type="file"] { width: min(100%, 620px); padding: 7px; }
+        .db-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 14px; }
+        .db-toolbar label { margin: 0; font-size: 13px; }
+        .db-toolbar label > span { display: block; margin-bottom: 5px; color: #526071; }
+        .db-status { margin-top: 10px; color: #526071; font-size: 13px; }
+        .db-status.bad { color: #991b1b; }
+        .record-row { cursor: pointer; }
+        .record-row.selected td { background: #dbeafe; }
+        #dbResult .table-wrap { max-height: 520px; overflow: auto; }
+        .pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+        .pager button { width: 40px; height: 36px; padding: 0; font-size: 18px; }
+        .pager span { min-width: 130px; text-align: center; color: #526071; font-size: 13px; }
         .error {
             display: none;
             margin-top: 14px;
@@ -91,7 +112,28 @@
 <body>
 <main class="container">
     <h1>CC → MSS 主系监控报文解析器</h1>
-    <p class="subtitle">依据 <code>cc.gen</code> 及生成的 <code>cc.gb.cpp</code>：大端序，支持 CCMsg、CCPubMsg（202/208/210）和 CCPrvMsg（203/206/209/212）。子报文长度字段仅展示，解析步进与服务端解码器保持一致。</p>
+    <p class="subtitle">依据接口协议、<code>cc.gen</code> 及生成代码解析大端序 CC 主系监控报文，兼容 129 字节旧版和 135 字节新版公有消息。</p>
+
+    <section class="card">
+        <h2>数据库报文</h2>
+        <label for="dbInput">选择 packet 表格式的 SQLite 数据库</label>
+        <input id="dbInput" type="file" accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3,application/x-sqlite3">
+        <div class="db-toolbar">
+            <label><span>发送端</span><select id="ccFilter"><option value="">全部</option><option value="1">CC1</option><option value="2">CC2</option></select></label>
+            <label><span>设备 MSG_ID</span><input id="deviceFilter" type="search" inputmode="numeric" placeholder="例如 21111"></label>
+            <label><span>时间</span><input id="timeFilter" type="search" placeholder="例如 09:24:29"></label>
+        </div>
+        <div id="dbStatus" class="db-status">数据库仅在当前浏览器中读取，不会上传。</div>
+        <div id="dbResult" class="hidden">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>ID</th><th>时间</th><th>设备 MSG_ID</th><th>发送端</th><th>激活端</th><th>MMI/TOD</th><th>PVID</th><th>Pub</th><th>Pub长度</th><th>报文长度</th></tr></thead>
+                    <tbody id="recordBody"></tbody>
+                </table>
+            </div>
+            <div class="pager"><button id="prevPage" class="secondary" type="button" title="上一页" aria-label="上一页">&#8249;</button><span id="pageInfo"></span><button id="nextPage" class="secondary" type="button" title="下一页" aria-label="下一页">&#8250;</button></div>
+        </div>
+    </section>
 
     <section class="card">
         <label for="hexInput">十六进制报文</label>
@@ -119,6 +161,7 @@
     </section>
 </main>
 
+<script src="./vendor/sql-asm.js"></script>
 <script>
     const CRC32_TABLE = (() => {
         const table = new Uint32Array(256);
@@ -181,6 +224,10 @@
             this.ensure(1); const start = this.offset; const value = this.bytes[this.offset++];
             this.add(name, start, 1, 'uint8', formatter ? formatter(value) : value, desc); return value;
         }
+        i8(name, desc = '') {
+            const value = this.u8(name, desc); const signed = value > 0x7F ? value - 0x100 : value;
+            this.fields[this.fields.length - 1].type = 'int8'; this.fields[this.fields.length - 1].value = String(signed); return signed;
+        }
         u16(name, desc = '') {
             this.ensure(2); const start = this.offset;
             const value = (this.bytes[this.offset] << 8) | this.bytes[this.offset + 1]; this.offset += 2;
@@ -224,7 +271,7 @@
     const driveMode = value => ({0:'NOM',1:'RM',2:'CMI',3:'AMI',4:'CMC',5:'AMC',6:'CAM',7:'FAM',8:'CME',9:'AME',10:'AME',255:'无效'})[value] ?? `未知(${value})`;
     const ctrlLevel = value => ({0:'DEF',1:'ILC',2:'ITC',3:'CTC',4:'UTO',255:'无效'})[value] ?? `未知(${value})`;
 
-    function parsePubMsg(bytes, fields, start, length) {
+    function parsePubMsg(bytes, fields, start, length, profile) {
         const end = start + length;
         if (end > bytes.length) throw new Error(`PubMsgLen=${length} 超出报文范围。`);
         const r = new Reader(bytes, fields, start, end, 'CCPubMsg.');
@@ -241,7 +288,7 @@
         r.u16('ebspeed', '紧急制动触发速度；0xFFFF无效');
         r.bits('stATPDetailFault', 4, ['A.PSU','A.COM','A.PPU','A.DRU','A.VC1','A.VC2','A.VOB1','A.VOB2','A.VOB3','A.VIB1','A.VIB2','A.VIB3','B.PSU','B.COM','B.PPU','B.DRU','B.VC1','B.VC2','B.VOB1','B.VOB2','B.VOB3','B.VIB1','B.VIB2','B.VIB3'], 'ATP板级故障');
         r.bits('stATPInitRst', 4, [], 'ATP设备自检结果');
-        r.bits('stDeviceFault', 2, ['BTM','雷达','OPGA','OPGB','TMS','MRA','MRB','LCC','LCP','TOD'], '设备故障');
+        const deviceFault = r.bits('stDeviceFault', 2, ['BTM','雷达','OPGA','OPGB','TMS','MRA','MRB','LCC','LCP','TOD'], '设备故障');
         r.bits('stATODetailFault', 4, ['A.PPU','A.ATO','B.PPU','B.ATO'], 'ATO板级故障');
         r.u32('platform_id', '站台ID；0表示无效');
         r.bits('atoOptFault', 1, ['速度/位置错误','保留','CC模式错误','控制量输出响应异常','ATP触发EB','列车系统故障','CAM过标超距','无电区蓄电池欠压'], 'ATO运行故障');
@@ -252,15 +299,21 @@
         r.u8('atp_eb', '紧急制动状态', boolDesc);
         r.u32('atpEbReason', '紧急制动原因');
         r.u8('atp_lose_loc', '位置丢失状态', boolDesc);
-        r.u64('atpLoseLocRsn', '位置丢失原因位图');
+        if (profile === 'legacy') r.u32('atpLoseLocRsn', '位置丢失原因位图（兼容版32位）');
+        else r.u64('atpLoseLocRsn', '位置丢失原因位图（新版64位）');
         r.u8('train_brake_fault', '制动力故障', boolDesc);
         r.u8('fullload_ratio', '乘客满载率；255无效');
         r.u32('map_version', '车载电子地图版本');
         r.u32('atp_version', 'ATP软件版本');
         r.u32('ato_version', 'ATO软件版本');
         r.u32('mmi_version', 'MMI软件版本');
-        r.i16('stopped_precision_atp', 'ATP停车精度');
-        r.i16('stopped_precision_ato', 'ATO停车精度');
+        if (profile === 'legacy') {
+            r.i8('stopped_precision_atp', 'ATP停车精度（兼容版int8）');
+            r.i8('stopped_precision_ato', 'ATO停车精度（兼容版int8）');
+        } else {
+            r.i16('stopped_precision_atp', 'ATP停车精度（新版int16）');
+            r.i16('stopped_precision_ato', 'ATO停车精度（新版int16）');
+        }
         r.byteArray('check_result', 6, '自定义保留');
         for (const name of ['zc1','zc2','ats1','ats2','cbi']) {
             r.u32(`${name}_id`, `${name.toUpperCase()} ID`);
@@ -268,23 +321,20 @@
         }
         r.u8('trn_com_fault', '车头车尾通信故障');
         r.u8('tms_com_fault', 'TMS通信故障');
-        r.u8('head_or_tail', '激活端：1-TC1，2-TC2，0xFF无效');
+        const headOrTail = r.u8('head_or_tail', '激活端：1-TC1，2-TC2，0xFF无效');
         r.byteArray('ExtendInitRst', 8, '扩展自检结果');
         r.u8('IsWakeUpInit', '是否唤醒自检');
         r.u8('rsved', '保留');
         const crcFieldIndex = fields.length;
         const received = r.u32('subcrc32', 'CCPubMsg子报文CRC32');
-        if (r.offset < end) r.byteArray('trailing_data', end - r.offset, '声明长度中超出cc.gen结构的尾部数据');
-        if (r.offset > end) throw new Error('CCPubMsg字段长度超过PubMsgLen。');
-        if (length >= 135) {
-            const calculated = crc32(bytes.slice(start, start + 131));
-            fields[crcFieldIndex].valid = calculated === received;
-            fields[crcFieldIndex].desc += `；计算值 ${toHex(calculated, 4)}`;
-        }
-        return innerId;
+        if (r.offset !== end) throw new Error(`CCPubMsg结构占用${r.offset - start}字节，与PubMsgLen=${length}不一致。`);
+        const calculated = crc32(bytes.slice(start, end - 4));
+        fields[crcFieldIndex].valid = calculated === received;
+        fields[crcFieldIndex].desc += `；计算值 ${toHex(calculated, 4)}`;
+        return { innerId, headOrTail, deviceFault, crcValid: calculated === received };
     }
 
-    function parsePrvMsg(bytes, fields, start, length) {
+    function parsePrvMsg(bytes, fields, start, length, profile) {
         const end = start + length;
         if (end > bytes.length) throw new Error(`PrvMsgLen=${length} 超出报文范围。`);
         const r = new Reader(bytes, fields, start, end, 'CCPrvMsg.');
@@ -329,33 +379,36 @@
         const beaconCount = r.u8('staticBeaconLostNum', '丢失静态信标数量');
         for (let i = 0; i < beaconCount; i++) r.u32(`staticBeaconLostIds[${i}]`, '丢失的静态信标ID');
 
-        let extensionLength = r.remaining() - 19;
-        if (extensionLength < 0) throw new Error('CCPrvMsg长度不足，无法容纳15字节保留区和subcrc32。');
-        if (extensionLength >= 4) { r.u32('standbyInitRst', '备系自检结果（206）'); extensionLength -= 4; }
-        if (extensionLength >= 9) { r.byteArray('ExtendInitRst', 8, '扩展自检结果'); r.u8('IsWakeUpInit', '是否唤醒自检'); extensionLength -= 9; }
-        if (extensionLength >= 23) {
-            r.u16('maxWheelDiameter', '最大轮径（209）'); r.u16('minWheelDiameter', '最小轮径（209）'); r.u16('rawWheelDiameter', '原始轮径（209）');
-            r.i16('accel', '实时加速度（209）'); r.i32('refSpeed', '推荐速度（209）'); r.i16('Effort', '牵引制动输出（209）');
-            r.i32('LocErrDist', '定位误差（209）'); r.i16('BatteryVoltageTC1', 'TC1蓄电池电压（209）');
-            r.i16('BatteryVoltageTC2', 'TC2蓄电池电压（209）'); r.u8('OprationalStatus', '运营状态（209）'); extensionLength -= 23;
+        const expectedTail = profile === 'legacy' ? 55 : 73;
+        if (r.remaining() === expectedTail) {
+            r.u32('standbyInitRst', '备系自检结果');
+            r.byteArray('ExtendInitRst', 8, '扩展自检结果');
+            r.u8('IsWakeUpInit', '是否唤醒自检');
+            r.u16('maxWheelDiameter', '最大轮径'); r.u16('minWheelDiameter', '最小轮径'); r.u16('rawWheelDiameter', '原始轮径');
+            if (profile === 'legacy') {
+                r.u16('accel', '实时加速度（兼容版uint16）'); r.u32('refSpeed', '推荐速度（兼容版uint32）');
+                r.u16('Effort', '牵引制动输出（兼容版uint16）'); r.u32('LocErrDist', '定位误差（兼容版uint32）');
+                r.byteArray('rsved', 20, '兼容版保留区');
+            } else {
+                r.i16('accel', '实时加速度'); r.i32('refSpeed', '推荐速度'); r.i16('Effort', '牵引制动输出');
+                r.i32('LocErrDist', '定位误差'); r.i16('BatteryVoltageTC1', 'TC1蓄电池电压');
+                r.i16('BatteryVoltageTC2', 'TC2蓄电池电压'); r.u8('OprationalStatus', '运营状态');
+                r.u16('maxWheelDiameterB', 'OPGB最大轮径'); r.u16('minWheelDiameterB', 'OPGB最小轮径');
+                r.u16('rawWheelDiameterB', 'OPGB原始轮径'); r.i16('accelB', 'OPGB实时加速度');
+                for (const name of ['JumpFailMask','JumpBakError','Jumpstate','SleepingState','WakeSuccess','WakeupStatus']) r.u8(name, '212扩展字段');
+                r.u32('BeaconReadId', '读到的信标ID'); r.byteArray('rsved', 15, '新版保留区');
+            }
+        } else {
+            if (r.remaining() < 4) throw new Error('CCPrvMsg缺少subcrc32。');
+            r.byteArray('versionSpecificData', r.remaining() - 4, `未匹配${profile === 'legacy' ? '兼容版' : '新版'}固定尾结构`);
         }
-        if (extensionLength >= 18) {
-            r.u16('maxWheelDiameterB', 'OPGB最大轮径（212）'); r.u16('minWheelDiameterB', 'OPGB最小轮径（212）');
-            r.u16('rawWheelDiameterB', 'OPGB原始轮径（212）'); r.i16('accelB', 'OPGB实时加速度（212）');
-            for (const name of ['JumpFailMask','JumpBakError','Jumpstate','SleepingState','WakeSuccess','WakeupStatus']) r.u8(name, '212扩展字段');
-            r.u32('BeaconReadId', '读到的信标ID（212）'); extensionLength -= 18;
-        }
-        if (extensionLength > 0) r.byteArray('unknownExtension', extensionLength, '未识别的版本扩展字段');
-        r.byteArray('rsved', 15, '保留');
         const crcFieldIndex = fields.length;
         const received = r.u32('subcrc32', 'CCPrvMsg子报文CRC32');
-        if (length >= 4) {
-            const calculated = crc32(bytes.slice(start, end - 4));
-            fields[crcFieldIndex].valid = calculated === received;
-            fields[crcFieldIndex].desc += `；按服务端传入长度计算值 ${toHex(calculated, 4)}`;
-        }
-        if (r.offset < end) r.byteArray('trailing_data', end - r.offset, '声明长度中的额外数据');
-        return innerId;
+        const calculated = crc32(bytes.slice(start, end - 4));
+        fields[crcFieldIndex].valid = calculated === received;
+        fields[crcFieldIndex].desc += `；计算值 ${toHex(calculated, 4)}`;
+        if (r.offset !== end) throw new Error(`CCPrvMsg结构占用${r.offset - start}字节，与PrvMsgLen=${length}不一致。`);
+        return { innerId, crcValid: calculated === received };
     }
 
     function parseCCMsg(bytes) {
@@ -371,7 +424,8 @@
         fields[sendFlagIndex].valid = sendFlag === 0x10;
         r.u8('rpheader.sendflag.com_id', '厂家ID');
         const ccInfoStart = r.offset; const ccInfo = r.u16('rpheader.sendflag.info', '低2位cc_id，高12位cc_pvid');
-        fields[fields.length - 1].value = `cc_id=${ccInfo & 0x03}, cc_pvid=${(ccInfo >>> 2) & 0x0FFF}`;
+        const ccId = ccInfo & 0x03; const ccPvid = (ccInfo >>> 2) & 0x0FFF;
+        fields[fields.length - 1].value = `cc_id=${ccId}, cc_pvid=${ccPvid}`;
         fields[fields.length - 1].start = ccInfoStart;
         const recvFlagIndex = fields.length; const recvFlag = r.u8('rpheader.recvflag.flag', '固定值0x20（MSS）');
         fields[recvFlagIndex].valid = recvFlag === 0x20;
@@ -385,23 +439,24 @@
         const pubLenFieldIndex = fields.length;
         const pubLen = r.u16('pubMsgLen', '发送端填写的CCPubMsg长度');
         const pubStart = r.offset;
-        const actualPubLen = 135;
-        fields[pubLenFieldIndex].desc += `；服务端CCPubMsg::get_srclength()固定为${actualPubLen}，偏移推进不使用该字段`;
-        const innerPubId = parsePubMsg(bytes, fields, pubStart, actualPubLen); r.offset = pubStart + actualPubLen;
-        fields[pubWrapperIndex].desc += `；内部msg_id=${innerPubId}`;
-        if (innerPubId !== pubMsgId) fields[pubWrapperIndex].valid = false;
+        const profile = pubLen === 129 ? 'legacy' : pubLen === 135 ? 'current' : null;
+        if (!profile) throw new Error(`暂不支持PubMsgLen=${pubLen}；已支持兼容版129字节和新版135字节。`);
+        fields[pubLenFieldIndex].valid = true;
+        fields[pubLenFieldIndex].desc += `；识别为${profile === 'legacy' ? '兼容版（todmsgold）' : '新版（当前cc.gen）'}`;
+        const pubResult = parsePubMsg(bytes, fields, pubStart, pubLen, profile); r.offset = pubStart + pubLen;
+        fields[pubWrapperIndex].desc += `；内部msg_id=${pubResult.innerId}`;
+        if (pubResult.innerId !== pubMsgId) fields[pubWrapperIndex].valid = false;
 
         const prvWrapperIndex = fields.length; const prvMsgId = r.u8('prvMsgId', '固定值203、206、209或212');
         fields[prvWrapperIndex].valid = [203, 206, 209, 212].includes(prvMsgId);
         const prvLenFieldIndex = fields.length;
         const prvLen = r.u16('prvMsgLen', '发送端填写的CCPrvMsg长度');
         const prvStart = r.offset;
-        const actualPrvLen = bytes.length - 4 - prvStart;
-        if (actualPrvLen < 0) throw new Error('缺少CCPrvMsg或CCMsg末尾CRC32。');
-        fields[prvLenFieldIndex].desc += `；服务端按CCPrvMsg实际结构推进，本报文实际占用${actualPrvLen}字节`;
-        const innerPrvId = parsePrvMsg(bytes, fields, prvStart, actualPrvLen); r.offset = prvStart + actualPrvLen;
-        fields[prvWrapperIndex].desc += `；内部msg_id=${innerPrvId}`;
-        if (innerPrvId !== prvMsgId) fields[prvWrapperIndex].valid = false;
+        if (prvStart + prvLen + 4 > bytes.length) throw new Error(`PrvMsgLen=${prvLen}超出报文范围。`);
+        const prvResult = parsePrvMsg(bytes, fields, prvStart, prvLen, profile); r.offset = prvStart + prvLen;
+        fields[prvLenFieldIndex].valid = true;
+        fields[prvWrapperIndex].desc += `；内部msg_id=${prvResult.innerId}`;
+        if (prvResult.innerId !== prvMsgId) fields[prvWrapperIndex].valid = false;
 
         if (r.remaining() < 4) throw new Error('缺少CCMsg末尾CRC32。');
         if (r.remaining() > 4) r.byteArray('unparsed_data', r.remaining() - 4, '子报文长度之外的额外数据');
@@ -411,7 +466,10 @@
         fields[topCrcIndex].desc += `；计算值 ${toHex(calculatedCrc, 4)}`;
         return {
             fields, frameLen, msgNum, pubMsgId, prvMsgId,
-            pubLen, actualPubLen, prvLen, actualPrvLen,
+            pubLen, prvLen, profile, ccId, ccPvid,
+            headOrTail: pubResult.headOrTail,
+            todFault: Number((pubResult.deviceFault >> 9n) & 1n),
+            pubCrcValid: pubResult.crcValid, prvCrcValid: prvResult.crcValid,
             crcValid: receivedCrc === calculatedCrc
         };
     }
@@ -423,12 +481,20 @@
     function render(bytes, parsed) {
         document.getElementById('summary').innerHTML = [
             `<span class="badge">总长度：${bytes.length} B</span>`,
+            `<span class="badge">协议：${parsed.profile === 'legacy' ? '兼容版（Pub 129B）' : '新版（Pub 135B）'}</span>`,
+            `<span class="badge">发送端：CC${parsed.ccId}</span>`,
+            `<span class="badge">PVID：${parsed.ccPvid}</span>`,
+            `<span class="badge">激活端：${parsed.headOrTail === 1 || parsed.headOrTail === 2 ? `CC${parsed.headOrTail}` : '无效'}</span>`,
+            `<span class="badge ${parsed.ccId === parsed.headOrTail ? 'ok' : 'bad'}">端状态：${parsed.ccId === parsed.headOrTail ? '当前发送端已激活' : '当前发送端非激活'}</span>`,
+            `<span class="badge ${parsed.todFault ? 'bad' : 'ok'}">MMI/TOD：${parsed.todFault ? '故障' : '正常'}</span>`,
             `<span class="badge">FrameLen：${parsed.frameLen}</span>`,
             `<span class="badge">消息数：${parsed.msgNum}</span>`,
             `<span class="badge">PubMsg：${parsed.pubMsgId}</span>`,
-            `<span class="badge">Pub长度：声明${parsed.pubLen} / 实际${parsed.actualPubLen}</span>`,
+            `<span class="badge">Pub长度：${parsed.pubLen}</span>`,
             `<span class="badge">PrvMsg：${parsed.prvMsgId}</span>`,
-            `<span class="badge">Prv长度：声明${parsed.prvLen} / 实际${parsed.actualPrvLen}</span>`,
+            `<span class="badge">Prv长度：${parsed.prvLen}</span>`,
+            `<span class="badge ${parsed.pubCrcValid ? 'ok' : 'bad'}">Pub CRC：${parsed.pubCrcValid ? '通过' : '失败'}</span>`,
+            `<span class="badge ${parsed.prvCrcValid ? 'ok' : 'bad'}">Prv CRC：${parsed.prvCrcValid ? '通过' : '失败'}</span>`,
             `<span class="badge ${parsed.crcValid ? 'ok' : 'bad'}">总CRC：${parsed.crcValid ? '通过' : '失败'}</span>`
         ].join('');
         document.getElementById('fieldBody').innerHTML = parsed.fields.map((field, index) => `
@@ -460,6 +526,7 @@
     function makeExample() {
         const pub = [202, 0x20, 0x01, 26, 7, 24, 12, 0, 0, 0, 1, 0, 7, 3];
         while (pub.length < 131) pub.push(0);
+        pub[120] = 1;
         pushU32(pub, crc32(Uint8Array.from(pub.slice(0, 131))));
 
         const prv = [212, 0, 0xAA, 1];
@@ -484,6 +551,115 @@
         document.getElementById('result').classList.add('hidden');
     }
 
+    const PAGE_SIZE = 100;
+    const dbState = { db: null, rows: [], filtered: [], page: 0, selectedId: null, fileName: '' };
+    let sqlModulePromise = null;
+
+    function setDbStatus(message, isError = false) {
+        const element = document.getElementById('dbStatus');
+        element.textContent = message; element.classList.toggle('bad', isError);
+    }
+
+    function decodeHeader(row) {
+        const header = parseHex(row.header);
+        const ccInfo = (header[5] << 8) | header[6];
+        const pubLen = (header[17] << 8) | header[18];
+        const deviceFault = parseInt(row.deviceFaultHex || '0', 16);
+        return {
+            id: Number(row.id), msgId: String(row.msgId), timestamp: String(row.timestamp), length: Number(row.length),
+            ccId: ccInfo & 0x03, ccPvid: (ccInfo >>> 2) & 0x0FFF,
+            msgNum: header[15], pubMsgId: header[16], pubLen,
+            headOrTail: parseInt(pubLen === 129 ? row.legacyHeadHex : row.currentHeadHex, 16),
+            todFault: (deviceFault >>> 9) & 1
+        };
+    }
+
+    function applyDbFilters() {
+        const cc = document.getElementById('ccFilter').value;
+        const device = document.getElementById('deviceFilter').value.trim();
+        const time = document.getElementById('timeFilter').value.trim().toLowerCase();
+        dbState.filtered = dbState.rows.filter(row =>
+            (!cc || row.ccId === Number(cc)) &&
+            (!device || row.msgId.includes(device)) &&
+            (!time || row.timestamp.toLowerCase().includes(time))
+        );
+        dbState.page = 0;
+        renderDbRecords();
+    }
+
+    function renderDbRecords() {
+        const pageCount = Math.max(1, Math.ceil(dbState.filtered.length / PAGE_SIZE));
+        dbState.page = Math.min(dbState.page, pageCount - 1);
+        const start = dbState.page * PAGE_SIZE;
+        const rows = dbState.filtered.slice(start, start + PAGE_SIZE);
+        document.getElementById('recordBody').innerHTML = rows.map(row => `
+            <tr class="record-row ${row.id === dbState.selectedId ? 'selected' : ''}" data-id="${row.id}">
+                <td>${row.id}</td><td>${escapeHtml(row.timestamp)}</td><td>${escapeHtml(row.msgId)}</td>
+                <td>CC${row.ccId}</td><td>${row.headOrTail === 1 || row.headOrTail === 2 ? `CC${row.headOrTail}` : '无效'}</td>
+                <td>${row.todFault ? '故障' : '正常'}</td><td>${row.ccPvid}</td><td>${row.pubMsgId}</td><td>${row.pubLen}</td><td>${row.length}</td>
+            </tr>`).join('');
+        document.getElementById('pageInfo').textContent = dbState.filtered.length
+            ? `${start + 1}-${Math.min(start + PAGE_SIZE, dbState.filtered.length)} / ${dbState.filtered.length}` : '0 条记录';
+        document.getElementById('prevPage').disabled = dbState.page === 0;
+        document.getElementById('nextPage').disabled = dbState.page >= pageCount - 1;
+        document.getElementById('dbResult').classList.remove('hidden');
+        const cc1 = dbState.rows.filter(row => row.ccId === 1).length;
+        const cc2 = dbState.rows.filter(row => row.ccId === 2).length;
+        const active = dbState.rows.filter(row => row.ccId === row.headOrTail).length;
+        setDbStatus(`${dbState.fileName}：识别 ${dbState.rows.length} 条 CC 主系监控报文（CC1 ${cc1}，CC2 ${cc2}，发送端已激活 ${active}），当前显示 ${dbState.filtered.length} 条。`);
+    }
+
+    function selectDbRecord(id) {
+        if (!dbState.db) return;
+        const statement = dbState.db.prepare('SELECT MESSAGE FROM packet WHERE ID = ?');
+        try {
+            statement.bind([id]);
+            if (!statement.step()) throw new Error(`找不到ID=${id}的报文。`);
+            const value = statement.get()[0];
+            const bytes = value instanceof Uint8Array ? value : Uint8Array.from(value);
+            const parsed = parseCCMsg(bytes);
+            dbState.selectedId = id;
+            document.getElementById('hexInput').value = bytesToHex(bytes);
+            document.getElementById('error').style.display = 'none';
+            render(bytes, parsed); renderDbRecords();
+            document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (error) { showError(error.message); }
+        finally { statement.free(); }
+    }
+
+    async function loadDatabase(file) {
+        setDbStatus(`正在读取 ${file.name}…`);
+        document.getElementById('dbResult').classList.add('hidden');
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        try {
+            sqlModulePromise ||= initSqlJs({});
+            const SQL = await sqlModulePromise;
+            const data = new Uint8Array(await file.arrayBuffer());
+            const db = new SQL.Database(data);
+            const statement = db.prepare(`
+                SELECT ID AS id, MSG_ID AS msgId, TIMESTAMP AS timestamp, LEN AS length,
+                       hex(substr(MESSAGE, 1, 19)) AS header,
+                       hex(substr(MESSAGE, 46, 2)) AS deviceFaultHex,
+                       hex(substr(MESSAGE, 134, 1)) AS legacyHeadHex,
+                       hex(substr(MESSAGE, 140, 1)) AS currentHeadHex
+                FROM packet
+                WHERE LEN >= 23
+                  AND substr(MESSAGE, 1, 1) = X'FF'
+                  AND substr(MESSAGE, 16, 1) = X'02'
+                  AND substr(MESSAGE, 17, 1) IN (X'CA', X'D0', X'D2')
+                ORDER BY ID`);
+            const rows = [];
+            while (statement.step()) rows.push(decodeHeader(statement.getAsObject()));
+            statement.free();
+            if (!rows.length) { db.close(); throw new Error('packet 表中未找到 CC 主系监控报文。'); }
+            if (dbState.db) dbState.db.close();
+            dbState.db = db; dbState.rows = rows; dbState.fileName = file.name; dbState.selectedId = null;
+            applyDbFilters(); selectDbRecord(rows[0].id);
+        } catch (error) {
+            setDbStatus(`读取失败：${error.message}`, true);
+        }
+    }
+
     document.getElementById('parseBtn').addEventListener('click', () => {
         document.getElementById('error').style.display = 'none';
         try { const bytes = parseHex(document.getElementById('hexInput').value); render(bytes, parseCCMsg(bytes)); }
@@ -495,6 +671,20 @@
     document.getElementById('clearBtn').addEventListener('click', () => {
         document.getElementById('hexInput').value = ''; document.getElementById('error').style.display = 'none'; document.getElementById('result').classList.add('hidden');
     });
+    document.getElementById('dbInput').addEventListener('change', event => {
+        const file = event.target.files[0]; if (file) loadDatabase(file);
+    });
+    for (const id of ['ccFilter', 'deviceFilter', 'timeFilter']) {
+        document.getElementById(id).addEventListener(id === 'ccFilter' ? 'change' : 'input', applyDbFilters);
+    }
+    document.getElementById('recordBody').addEventListener('click', event => {
+        const row = event.target.closest('[data-id]'); if (row) selectDbRecord(Number(row.dataset.id));
+    });
+    document.getElementById('prevPage').addEventListener('click', () => { if (dbState.page > 0) { dbState.page--; renderDbRecords(); } });
+    document.getElementById('nextPage').addEventListener('click', () => {
+        if ((dbState.page + 1) * PAGE_SIZE < dbState.filtered.length) { dbState.page++; renderDbRecords(); }
+    });
+    window.CCParser = { parseHex, parseCCMsg, crc32 };
 </script>
 </body>
 </html>

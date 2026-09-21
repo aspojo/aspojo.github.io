@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CC DRU 55 AA 报文解析器</title>
+    <style>
+        * { box-sizing: border-box; }
+        :root {
+            color-scheme: light;
+            --ink: #172033;
+            --muted: #627083;
+            --line: #d9e0e9;
+            --panel: #ffffff;
+            --canvas: #f4f6f8;
+            --accent: #176b55;
+            --accent-hover: #105543;
+            --ok: #167348;
+            --ok-bg: #e4f5eb;
+            --bad: #a02c34;
+            --bad-bg: #fdebec;
+        }
+        body {
+            margin: 0;
+            padding: 24px;
+            color: var(--ink);
+            background: var(--canvas);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
+        main { width: min(1500px, 100%); margin: 0 auto; }
+        header { margin-bottom: 20px; }
+        h1 { margin: 0; font-size: 27px; letter-spacing: 0; }
+        .subtitle { margin: 7px 0 0; color: var(--muted); font-size: 14px; }
+        .panel {
+            margin-bottom: 16px;
+            padding: 18px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel);
+            box-shadow: 0 3px 12px rgba(32, 44, 62, .05);
+        }
+        label { display: block; margin-bottom: 8px; font-weight: 700; }
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 1px solid #aebaca;
+            border-radius: 6px;
+            color: #142033;
+            background: #fff;
+            font: 14px/1.55 Consolas, "Courier New", monospace;
+            resize: vertical;
+        }
+        textarea:focus { outline: 2px solid #b7dfd2; border-color: var(--accent); }
+        .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+        button {
+            min-height: 40px;
+            padding: 9px 15px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        button.primary { color: #fff; background: var(--accent); }
+        button.primary:hover { background: var(--accent-hover); }
+        button.secondary { color: #2c3949; border-color: #d1d9e3; background: #eef1f5; }
+        button.secondary:hover { background: #e2e7ed; }
+        .error {
+            display: none;
+            margin-top: 12px;
+            padding: 10px 12px;
+            color: var(--bad);
+            border: 1px solid #f2bcc0;
+            border-radius: 6px;
+            background: var(--bad-bg);
+        }
+        .hidden { display: none; }
+        .summary { display: flex; flex-wrap: wrap; gap: 8px; }
+        .badge { padding: 6px 9px; border-radius: 5px; color: #334155; background: #edf1f5; font-size: 13px; }
+        .badge.ok { color: var(--ok); background: var(--ok-bg); }
+        .badge.bad { color: var(--bad); background: var(--bad-bg); }
+        h2 { margin: 0 0 13px; font-size: 18px; }
+        .table-wrap { max-height: 66vh; overflow: auto; border: 1px solid var(--line); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 8px 9px; border-bottom: 1px solid #e7ebf0; text-align: left; vertical-align: top; }
+        th { position: sticky; top: 0; z-index: 1; color: #fff; background: #344455; white-space: nowrap; }
+        tbody tr:hover td { background: #f6faf8; }
+        tr.invalid td { background: #fff0f1; }
+        .section-row td { color: #155d4b; background: #eaf4f0; font-weight: 750; }
+        .field { font-weight: 650; white-space: nowrap; }
+        .mono { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
+        .desc { min-width: 230px; white-space: normal; }
+        pre {
+            max-height: 280px;
+            margin: 0;
+            padding: 13px;
+            overflow: auto;
+            color: #d8f3e9;
+            border-radius: 6px;
+            background: #16201f;
+            font: 13px/1.6 Consolas, "Courier New", monospace;
+        }
+        @media (max-width: 720px) {
+            body { padding: 12px; }
+            .panel { padding: 13px; }
+            h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <h1>CC DRU 55 AA 报文解析器</h1>
+        <p class="subtitle">大端序 · DRU 私有报文类型 0x0001–0x0008 · CRC32</p>
+    </header>
+
+    <section class="panel">
+        <label for="hexInput">十六进制报文</label>
+        <textarea id="hexInput" spellcheck="false" placeholder="55 AA 00 28 00 06 ..."></textarea>
+        <div class="actions">
+            <button class="primary" type="button" id="parseBtn">解析</button>
+            <button class="secondary" type="button" id="exampleBtn">载入 CF 示例</button>
+            <button class="secondary" type="button" id="copyBtn">复制 JSON</button>
+            <button class="secondary" type="button" id="clearBtn">清空</button>
+        </div>
+        <div id="error" class="error"></div>
+    </section>
+
+    <section id="result" class="hidden">
+        <div class="panel"><div id="summary" class="summary"></div></div>
+        <div class="panel">
+            <h2>字段解析</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>#</th><th>分区</th><th>字段</th><th>偏移</th><th>长度</th><th>原始值</th><th>解析值</th><th>说明</th></tr></thead>
+                    <tbody id="fieldBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="panel"><h2>原始数据</h2><pre id="hexDump"></pre></div>
+    </section>
+</main>
+
+<script>
+    const PACKET_TYPES = {
+        1: '版本信息',
+        2: '电子标签',
+        3: '宕机日志',
+        4: '错误日志',
+        5: 'IO 码位信息',
+        6: 'CF/SSD 状态',
+        7: '可扩展状态',
+        8: 'TOD 复显信息'
+    };
+
+    const CRC32_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let data = (i << 24) >>> 0;
+            let value = 0;
+            for (let bit = 0; bit < 8; bit++) {
+                value = ((data ^ value) & 0x80000000)
+                    ? (((value << 1) ^ 0x04C11DB7) >>> 0)
+                    : ((value << 1) >>> 0);
+                data = (data << 1) >>> 0;
+            }
+            table[i] = value >>> 0;
+        }
+        return table;
+    })();
+
+    function crc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (const byte of bytes) {
+            crc = (((crc << 8) >>> 0) ^ CRC32_TABLE[((crc >>> 24) & 0xFF) ^ byte]) >>> 0;
+        }
+        return crc >>> 0;
+    }
+
+    function toHex(value, byteLength) {
+        return '0x' + Number(value).toString(16).toUpperCase().padStart(byteLength * 2, '0').slice(-byteLength * 2);
+    }
+
+    function bytesToHex(bytes) {
+        return Array.from(bytes, byte => byte.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+    }
+
+    function bytesToAscii(bytes) {
+        return Array.from(bytes, byte => byte === 0 ? '' : (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.')).join('').trim();
+    }
+
+    function parseHex(input) {
+        const clean = input.replace(/0x/gi, '').replace(/[\s,;:_-]+/g, '');
+        if (!clean) throw new Error('请输入十六进制报文。');
+        if (!/^[0-9a-f]+$/i.test(clean)) throw new Error('输入中包含非十六进制字符。');
+        if (clean.length % 2 !== 0) throw new Error('十六进制字符数必须为偶数。');
+        return Uint8Array.from(clean.match(/.{2}/g).map(item => parseInt(item, 16)));
+    }
+
+    class Reader {
+        constructor(bytes, fields, start, limit, section) {
+            this.bytes = bytes;
+            this.fields = fields;
+            this.offset = start;
+            this.limit = limit;
+            this.section = section;
+        }
+        remaining() { return this.limit - this.offset; }
+        ensure(length) {
+            if (length < 0 || this.offset + length > this.limit) {
+                throw new Error(`${this.section} 在偏移 ${toHex(this.offset, 2)} 还需要 ${length} 字节，仅剩 ${this.remaining()} 字节。`);
+            }
+        }
+        add(name, start, length, value, desc = '', valid = null) {
+            this.fields.push({
+                section: this.section,
+                name,
+                start,
+                length,
+                raw: this.bytes.slice(start, start + length),
+                value: String(value),
+                desc,
+                valid
+            });
+        }
+        u8(name, desc = '', formatter = null, valid = null) {
+            this.ensure(1);
+            const start = this.offset;
+            const value = this.bytes[this.offset++];
+            this.add(name, start, 1, formatter ? formatter(value) : value, desc, valid === null ? null : valid(value));
+            return value;
+        }
+        u16(name, desc = '', formatter = null, valid = null) {
+            this.ensure(2);
+            const start = this.offset;
+            const value = (this.bytes[this.offset] << 8) | this.bytes[this.offset + 1];
+            this.offset += 2;
+            this.add(name, start, 2, formatter ? formatter(value) : value, desc, valid === null ? null : valid(value));
+            return value;
+        }
+        u32(name, desc = '', formatter = null) {
+            this.ensure(4);
+            const start = this.offset;
+            const value = (((this.bytes[this.offset] << 24) >>> 0) |
+                (this.bytes[this.offset + 1] << 16) |
+                (this.bytes[this.offset + 2] << 8) |
+                this.bytes[this.offset + 3]) >>> 0;
+            this.offset += 4;
+            this.add(name, start, 4, formatter ? formatter(value) : value, desc);
+            return value;
+        }
+        i32(name, desc = '') {
+            const value = this.u32(name, desc);
+            const signed = value > 0x7FFFFFFF ? value - 0x100000000 : value;
+            this.fields[this.fields.length - 1].value = String(signed);
+            return signed;
+        }
+        bytesField(name, length, desc = '', formatter = bytesToHex) {
+            this.ensure(length);
+            const start = this.offset;
+            this.offset += length;
+            const value = formatter(this.bytes.slice(start, this.offset));
+            this.add(name, start, length, value || '(空)', desc);
+            return this.bytes.slice(start, this.offset);
+        }
+        cstring(name, desc = '') {
+            const start = this.offset;
+            while (this.offset < this.limit && this.bytes[this.offset] !== 0) this.offset++;
+            if (this.offset >= this.limit) throw new Error(`${this.section}.${name} 缺少 NUL 结束符。`);
+            const valueBytes = this.bytes.slice(start, this.offset);
+            this.offset++;
+            this.add(name, start, this.offset - start, bytesToAscii(valueBytes), desc);
+            return bytesToAscii(valueBytes);
+        }
+    }
+
+    function parseLogHeader(reader, prefix = '') {
+        const year = reader.u8(prefix + 'year', '年份偏移（2000 + year）');
+        const month = reader.u8(prefix + 'month');
+        const day = reader.u8(prefix + 'day');
+        const hour = reader.u8(prefix + 'hour');
+        const minute = reader.u8(prefix + 'minute');
+        const second = reader.u8(prefix + 'second');
+        reader.u16(prefix + 'millisecond');
+        reader.u8(prefix + 'boardId', '板卡 ID', value => `${value} (${toHex(value, 1)})`);
+        reader.u8(prefix + 'moduleId', '模块 ID', value => `${value} (${toHex(value, 1)})`);
+        const logId = reader.u8(prefix + 'logId', 'bit7:平台/业务，bit6:制造商/用户，bit5:日志/统计，bit2..0:等级', value => {
+            const level = value & 0x07;
+            const isLog = (value >> 5) & 0x01;
+            const isConsumer = (value >> 6) & 0x01;
+            const isPlatform = (value >> 7) & 0x01;
+            return `${toHex(value, 1)}；level=${level}, ${isLog ? '统计' : '日志'}, ${isConsumer ? '用户' : '制造商'}, ${isPlatform ? '业务' : '平台'}`;
+        });
+        reader.u8(prefix + 'logType');
+        reader.u32(prefix + 'safetyTime');
+        reader.u32(prefix + 'cycle');
+        const last = reader.fields[reader.fields.length - 1];
+        last.desc = `非安全时间：${2000 + year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}；logId=${toHex(logId, 1)}`;
+    }
+
+    function parseVersion(reader) {
+        const start = reader.offset;
+        const raw = reader.bytesField('versionText', reader.remaining(), 'ASCII；名称与版本号之间使用四个空格', bytesToAscii);
+        const text = bytesToAscii(raw);
+        const parts = text.split(/ {4,}/);
+        if (parts.length > 1) {
+            reader.fields.push({ section: reader.section, name: 'versionName', start, length: 0, raw: new Uint8Array(), value: parts[0].trim(), desc: '解析出的版本名称', valid: null });
+            reader.fields.push({ section: reader.section, name: 'versionNumber', start, length: 0, raw: new Uint8Array(), value: parts.slice(1).join('    ').trim(), desc: '解析出的版本号', valid: null });
+        }
+    }
+
+    function parseETag(reader) {
+        reader.u8('ucBoardType', '单板类型', value => `${value} (${toHex(value, 1)})`);
+        reader.bytesField('board_name', 16, 'ASCII，右侧空格填充', bytesToAscii);
+        reader.bytesField('bom', 12, 'ASCII', bytesToAscii);
+        reader.u8('bom_version');
+        reader.bytesField('reserved1', 3);
+        reader.bytesField('board_made_sn', 10, '制造序列号', bytesToAscii);
+        reader.u8('pcb_version');
+        reader.bytesField('reserved2', 5);
+        reader.bytesField('made_year', 4, '制造年份', bytesToAscii);
+        reader.bytesField('made_month', 2, '制造月份', bytesToAscii);
+        reader.bytesField('made_day', 2, '制造日期', bytesToAscii);
+        reader.bytesField('made_week', 2, '制造周数', bytesToAscii);
+        reader.bytesField('made_factory', 4, '制造地点编码', bytesToAscii);
+        reader.bytesField('reserved3', 2);
+        reader.bytesField('made_user1', 32, '项目名称 1', bytesToAscii);
+        reader.bytesField('made_user2', 32, '项目名称 2 / 子项目', bytesToAscii);
+        reader.bytesField('reserved4', 88);
+        for (const name of ['mac_eth0', 'mac_eth1', 'mac_eth2', 'mac_eth3', 'mac_eth_debug']) {
+            reader.bytesField(name, 8, '前 6 字节为 MAC，后 2 字节保留', bytes => bytesToHex(bytes.slice(0, 6)).replace(/ /g, ':'));
+        }
+    }
+
+    function parseLogEnvelope(reader) {
+        reader.cstring('source', '日志来源');
+        reader.u32('sourceTimestamp', '服务端当前不使用该时间');
+        const logLength = reader.u16('logLength', '从 LogMsgHead 到本条日志结束的长度');
+        if (logLength > reader.remaining()) throw new Error(`logLength=${logLength}，但载荷仅剩 ${reader.remaining()} 字节。`);
+        const logReader = new Reader(reader.bytes, reader.fields, reader.offset, reader.offset + logLength, '日志内容');
+        parseLogHeader(logReader);
+        logReader.cstring('text', '日志文本');
+        if (logReader.remaining() > 0) logReader.bytesField('binary', logReader.remaining(), '日志二进制附加数据');
+        reader.offset += logLength;
+        if (reader.remaining() > 0) reader.bytesField('trailingData', reader.remaining(), '日志长度字段之外的数据');
+    }
+
+    function parseIO(reader) {
+        reader.u8('reserved');
+        const inputCount = reader.u8('inputChannelCount', '输入物理码位数 N1');
+        const outputCount = reader.u8('outputChannelCount', '输出物理码位数 N2');
+        reader.u8('boardError', '板卡错误状态', value => `${value} (${toHex(value, 1)})`);
+        const inputErrorCount = reader.u8('inputErrorCount', '输入故障数量 NE1');
+        const outputErrorCount = reader.u8('outputErrorCount', '输出故障数量 NE2');
+        reader.bytesField('inputStates', Math.ceil(inputCount / 8), '输入码位位图；每字节按 bit0 到 bit7 排列');
+        reader.bytesField('outputStates', Math.ceil(outputCount / 8), '输出码位位图；每字节按 bit0 到 bit7 排列');
+        for (let i = 0; i < inputErrorCount; i++) {
+            reader.bytesField(`inputErrors[${i}]`, 2, '故障码、码位');
+        }
+        for (let i = 0; i < outputErrorCount; i++) {
+            reader.bytesField(`outputErrors[${i}]`, 2, '故障码、码位');
+        }
+    }
+
+    function parseCF(reader) {
+        reader.u32('statusCode', 'CF/SSD 状态码', value => `${value} (${toHex(value, 4)})`);
+        reader.u32('totalCapacity', '总容量');
+        reader.u32('freeSpace', '空闲容量');
+        reader.u32('writeSpeed', '写入速率');
+        reader.u32('maxDevLogNumber', 'dev 开发日志最大序列号');
+        reader.u32('maxUserLogNumber', 'user 用户日志最大序列号');
+    }
+
+    function parseExtensibleState(reader) {
+        reader.cstring('source', '状态来源');
+        reader.u32('sourceTimestamp');
+        const contentLength = reader.u16('contentLength', '从 LogMsgHead 到载荷结束的长度');
+        if (contentLength !== reader.remaining()) {
+            reader.fields[reader.fields.length - 1].valid = false;
+            reader.fields[reader.fields.length - 1].desc += `；实际 ${reader.remaining()} 字节`;
+        } else {
+            reader.fields[reader.fields.length - 1].valid = true;
+        }
+        parseLogHeader(reader, 'log.');
+        reader.cstring('text', '状态文本');
+        reader.bytesField('reserved', 4);
+        reader.u32('cycleNumber');
+        const stateLength = reader.u16('stateDataLength', '状态数组字节数，应为 4 的倍数');
+        reader.bytesField('stateReserved', 2);
+        if (stateLength % 4 !== 0) throw new Error(`stateDataLength=${stateLength}，不是 4 的倍数。`);
+        for (let i = 0; i < stateLength / 4; i++) {
+            reader.u8(`states[${i}].type`, '0x02 COM，0x03 PPU，0x04 ATO', value => `${toHex(value, 1)}`);
+            reader.u8(`states[${i}].state`, '0x55 正常，其他值故障', value => `${toHex(value, 1)} (${value === 0x55 ? '正常' : '故障'})`);
+            reader.bytesField(`states[${i}].reserved`, 2);
+        }
+        reader.u32('innerCrc', 'ExtensibleState 内层 CRC（协议字段，仅展示）', value => toHex(value, 4));
+    }
+
+    function parseTOD(reader) {
+        parseLogHeader(reader, 'log.');
+        reader.cstring('log.text', 'TOD 日志文本');
+        reader.section = 'TOD 二进制';
+        reader.u8('MsgType', '固定值 0x37', value => toHex(value, 1), value => value === 0x37);
+        reader.u32('MsgSeqNo');
+        reader.u16('PVID');
+        reader.u8('CabNum');
+        reader.u8('CtrlState');
+        reader.u8('CC_Mode');
+        reader.u8('CC_Mode_Available');
+        reader.i32('SafeSpeed', '列车速度');
+        reader.u8('TravelDir');
+        for (const [name, desc] of [
+            ['AuthSpeed', '授权速度（EB 速度）'], ['FSBSpeed', 'FSB 速度'], ['RecommendSpeed', '推荐速度'],
+            ['TP_Distance', '目标距离'], ['TP_SpeedLimit', '目标限制速度']
+        ]) reader.u32(name, desc);
+        for (const name of ['PSDStatus', 'EBStatus', 'FSBStatus', 'LocationFlag']) reader.u8(name);
+        reader.u32('CCFault', 'CC 故障码', value => toHex(value, 4));
+        for (const name of ['EBCause', 'FSBCause', 'WarningCause']) reader.u8(name);
+        for (const name of ['SyncTime', 'CurCycleNum', 'DriverID', 'StopCountDown']) reader.u32(name);
+        for (const name of ['DoorCtrlMode', 'DepartHint', 'ATB']) reader.u8(name);
+        reader.u16('AutoChangeTimer');
+        for (const name of ['ATOStatus', 'ATOAddStatus', 'ATOEvent']) reader.u32(name, '', value => toHex(value, 4));
+        reader.u8('GlobalXtimeState');
+        const year = reader.u16('GlobalXtime_year');
+        const month = reader.u8('GlobalXtime_month');
+        const day = reader.u8('GlobalXtime_day');
+        const hour = reader.u8('GlobalXtime_hour');
+        const minute = reader.u8('GlobalXtime_minute');
+        const second = reader.u8('GlobalXtime_second');
+        reader.fields[reader.fields.length - 1].desc = `全网时间：${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+        reader.u16('Reserve');
+        for (const name of ['ScheduleType', 'Schedule_Hour', 'Schedule_Minute', 'Schedule_Second', 'TrainsWorkCondition', 'IntoFAMTimer', 'CurPreSetMode', 'SettingPreSetMode', 'StopAreaState', 'CMRevState', 'ExitCBTCAreaStatus']) reader.u8(name);
+        reader.u16('NIDID', '服务号');
+        reader.u16('NIDripID', '车次号');
+        reader.u8('TrainSpeedType');
+        const linkCount = reader.u8('ExLinkStatLen', '外部连接状态数组长度');
+        for (let i = 0; i < linkCount; i++) {
+            for (const suffix of ['AA', 'AB', 'BA', 'BB']) reader.u8(`OuterLinkStates[${i}].${suffix}`);
+        }
+        const curveCount = reader.u8('TODCrvDataLen', '曲线点数量');
+        for (let i = 0; i < curveCount; i++) reader.u32(`TODCrvSpeedData[${i}]`);
+        for (let i = 0; i < curveCount; i++) reader.u32(`TODCrvDistanceData[${i}]`);
+        const atoLength = reader.u16('ATO2TODDataLen', 'ATO 至 TOD 数据长度；服务端仍固定解析后续 29 字节结构');
+        const atoLengthField = reader.fields[reader.fields.length - 1];
+        atoLengthField.valid = atoLength === 29;
+        const atoStart = reader.offset;
+        for (const name of ['StartStationId', 'NextStationId', 'TermStationId']) reader.u32(`ATO2TOD.${name}`);
+        reader.i32('ATO2TOD.StopDistance');
+        reader.u32('ATO2TOD.StationDistance');
+        reader.u8('ATO2TOD.TraceState');
+        reader.u8('ATO2TOD.DoorsCtrlStrategy');
+        reader.u32('ATO2TOD.DistanceToPreviousStation');
+        reader.u8('ATO2TOD.IsBrakeHold');
+        reader.u16('ATO2TOD.WarningCause');
+        const consumed = reader.offset - atoStart;
+        if (atoLength > consumed) reader.bytesField('ATO2TOD.extra', atoLength - consumed);
+        reader.u8('SleepFaultCause');
+        reader.u16('ToTODDRUnlockTimeOut');
+        reader.u16('ToTODEscDRUnlockTimeOut');
+        for (const name of ['CheckFamCondMask', 'SleepCondMask', 'DptCodCheckMask', 'PeEnMask']) reader.u32(name, '', value => toHex(value, 4));
+        reader.u8('CurSleepItem');
+        reader.u16('CurSleepItemOverTime');
+        reader.u8('LocState');
+        reader.u8('OtherCCCommStatus');
+        reader.u32('DptEnMask', '', value => toHex(value, 4));
+        reader.u8('CoupleState');
+        reader.u8('GroupInfo');
+        reader.u32('DistanceToObstacle');
+        const atpLength = reader.u16('AtpStatusCodeLength');
+        reader.bytesField('AtpStatusCode', atpLength);
+        const ccCount = reader.u8('CCNum');
+        for (let i = 0; i < ccCount; i++) {
+            reader.u16(`CCStates[${i}].PVID`);
+            reader.u8(`CCStates[${i}].CabEnd`);
+            reader.u8(`CCStates[${i}].IsCurHead`);
+            reader.u32(`CCStates[${i}].CCFault`, '', value => toHex(value, 4));
+            reader.u32(`CCStates[${i}].ATOFault`, '', value => toHex(value, 4));
+            reader.u8(`CCStates[${i}].CurEndCplIO`);
+            reader.u8(`CCStates[${i}].CurEndOtherCplIO`);
+            reader.u8(`CCStates[${i}].CplQueryState`);
+            reader.u8(`CCStates[${i}].IsTopoBuildSuccess`);
+        }
+    }
+
+    function parsePayload(type, bytes, fields, start, end) {
+        const reader = new Reader(bytes, fields, start, end, PACKET_TYPES[type] || '未知载荷');
+        switch (type) {
+            case 1: parseVersion(reader); break;
+            case 2: parseETag(reader); break;
+            case 3:
+            case 4: parseLogEnvelope(reader); break;
+            case 5: parseIO(reader); break;
+            case 6: parseCF(reader); break;
+            case 7: parseExtensibleState(reader); break;
+            case 8: parseTOD(reader); break;
+            default: reader.bytesField('payload', reader.remaining(), '未知 packetType，按原始字节展示');
+        }
+        if (reader.remaining() > 0) reader.bytesField('unparsed', reader.remaining(), '未解析的剩余载荷');
+    }
+
+    function parseMessage(bytes) {
+        if (bytes.length < 20) throw new Error(`报文至少需要 20 字节，当前 ${bytes.length} 字节。`);
+        const fields = [];
+        const reader = new Reader(bytes, fields, 0, bytes.length, 'DRU 私有头');
+        reader.u8('frameType1', '固定值 0x55', value => toHex(value, 1), value => value === 0x55);
+        reader.u8('frameType2', '固定值 0xAA', value => toHex(value, 1), value => value === 0xAA);
+        const msgLength = reader.u16('msgLen', '从 packetType（偏移 4）到报文结尾的字节数');
+        const lengthField = fields[fields.length - 1];
+        const expectedTotal = msgLength + 4;
+        lengthField.valid = expectedTotal === bytes.length;
+        lengthField.desc += `；期望总长 ${expectedTotal}，实际总长 ${bytes.length}`;
+        const type = reader.u16('packetType', '私有报文类型', value => `${toHex(value, 2)} (${PACKET_TYPES[value] || '未知'})`);
+        reader.u8('reserved', '保留字段');
+        const subsystem = reader.u8('subSystem', '0=A 系，1=B 系', value => value === 0 ? '0 (A 系)' : value === 1 ? '1 (B 系)' : `${value} (未知)`);
+        reader.u8('sendFlag.flag', '固定值 0x10（VOBC）', value => toHex(value, 1), value => value === 0x10);
+        reader.u8('sendFlag.comId', '厂家 ID');
+        const ccInfo = reader.u16('sendFlag.ccInfo', '低 2 位 cc_id，随后 12 位 cc_pvid', value => `cc_id=${value & 0x03}, cc_pvid=${(value >>> 2) & 0x0FFF}`);
+        reader.u8('recvFlag.flag', '固定值 0x20（MSS）', value => toHex(value, 1), value => value === 0x20);
+        reader.u8('recvFlag.comId', '厂家 ID');
+        reader.u16('recvFlag.mssId', 'MSS ID');
+
+        if (msgLength < 16) throw new Error(`msgLen=${msgLength}，小于协议最小值 16。`);
+        if (expectedTotal > bytes.length) throw new Error(`报文不完整：msgLen 要求总长 ${expectedTotal} 字节，当前只有 ${bytes.length} 字节。`);
+        const payloadEnd = expectedTotal - 4;
+        parsePayload(type, bytes, fields, 16, payloadEnd);
+
+        const crcReader = new Reader(bytes, fields, payloadEnd, expectedTotal, '校验');
+        const receivedCrc = crcReader.u32('crc32', '从首字节到 CRC 前一字节计算', value => toHex(value, 4));
+        const calculatedCrc = crc32(bytes.slice(0, payloadEnd));
+        const crcField = fields[fields.length - 1];
+        crcField.valid = receivedCrc === calculatedCrc;
+        crcField.desc += `；计算值 ${toHex(calculatedCrc, 4)}`;
+        if (expectedTotal < bytes.length) {
+            const extraReader = new Reader(bytes, fields, expectedTotal, bytes.length, '额外数据');
+            extraReader.bytesField('bytes', extraReader.remaining(), 'msgLen 声明范围之外的数据');
+        }
+
+        return {
+            fields,
+            type,
+            typeName: PACKET_TYPES[type] || '未知类型',
+            subsystem,
+            ccId: ccInfo & 0x03,
+            pvid: (ccInfo >>> 2) & 0x0FFF,
+            expectedTotal,
+            actualTotal: bytes.length,
+            lengthValid: expectedTotal === bytes.length,
+            crcValid: receivedCrc === calculatedCrc,
+            calculatedCrc
+        };
+    }
+
+    function render(parsed, bytes) {
+        const summary = document.getElementById('summary');
+        summary.innerHTML = [
+            `<span class="badge">类型：${toHex(parsed.type, 2)} ${parsed.typeName}</span>`,
+            `<span class="badge">系统：${parsed.subsystem === 0 ? 'A' : parsed.subsystem === 1 ? 'B' : parsed.subsystem}</span>`,
+            `<span class="badge">PVID：${parsed.pvid}</span>`,
+            `<span class="badge">CC：${parsed.ccId}</span>`,
+            `<span class="badge ${parsed.lengthValid ? 'ok' : 'bad'}">长度：${parsed.lengthValid ? '通过' : '失败'}</span>`,
+            `<span class="badge ${parsed.crcValid ? 'ok' : 'bad'}">CRC：${parsed.crcValid ? '通过' : '失败'}</span>`,
+            `<span class="badge">总长：${parsed.actualTotal} B</span>`
+        ].join('');
+
+        const body = document.getElementById('fieldBody');
+        body.innerHTML = '';
+        let currentSection = '';
+        parsed.fields.forEach((field, index) => {
+            if (field.section !== currentSection) currentSection = field.section;
+            const row = document.createElement('tr');
+            if (field.valid === false) row.className = 'invalid';
+            row.innerHTML = `<td>${index + 1}</td>` +
+                `<td>${escapeHtml(field.section)}</td>` +
+                `<td class="field">${escapeHtml(field.name)}</td>` +
+                `<td class="mono">${toHex(field.start, field.start > 0xFF ? 2 : 1)}</td>` +
+                `<td>${field.length}</td>` +
+                `<td class="mono">${escapeHtml(bytesToHex(field.raw) || '-')}</td>` +
+                `<td>${escapeHtml(field.value)}</td>` +
+                `<td class="desc">${escapeHtml(field.desc)}${field.valid === true ? '；校验通过' : field.valid === false ? '；校验失败' : ''}</td>`;
+            body.appendChild(row);
+        });
+        document.getElementById('hexDump').textContent = formatHexDump(bytes);
+        document.getElementById('result').classList.remove('hidden');
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    }
+
+    function formatHexDump(bytes) {
+        const lines = [];
+        for (let i = 0; i < bytes.length; i += 16) {
+            const part = bytes.slice(i, i + 16);
+            const hex = bytesToHex(part).padEnd(47, ' ');
+            const ascii = Array.from(part, byte => byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.').join('');
+            lines.push(`${i.toString(16).toUpperCase().padStart(4, '0')}  ${hex}  ${ascii}`);
+        }
+        return lines.join('\n');
+    }
+
+    function pushU16(target, value) {
+        target.push((value >>> 8) & 0xFF, value & 0xFF);
+    }
+
+    function pushU32(target, value) {
+        target.push((value >>> 24) & 0xFF, (value >>> 16) & 0xFF, (value >>> 8) & 0xFF, value & 0xFF);
+    }
+
+    function makeCFExample() {
+        const bytes = [0x55, 0xAA, 0, 0, 0, 6, 0, 0, 0x10, 1];
+        pushU16(bytes, (123 << 2) | 1);
+        bytes.push(0x20, 1);
+        pushU16(bytes, 1);
+        pushU32(bytes, 0);
+        pushU32(bytes, 128000);
+        pushU32(bytes, 64000);
+        pushU32(bytes, 2500);
+        pushU32(bytes, 42);
+        pushU32(bytes, 18);
+        const msgLength = bytes.length;
+        bytes[2] = (msgLength >>> 8) & 0xFF;
+        bytes[3] = msgLength & 0xFF;
+        pushU32(bytes, crc32(Uint8Array.from(bytes)));
+        return bytesToHex(bytes);
+    }
+
+    function showError(message) {
+        const error = document.getElementById('error');
+        error.textContent = message;
+        error.style.display = 'block';
+    }
+
+    function runParse() {
+        const error = document.getElementById('error');
+        error.style.display = 'none';
+        try {
+            const bytes = parseHex(document.getElementById('hexInput').value);
+            const parsed = parseMessage(bytes);
+            window.lastParsedResult = parsed;
+            render(parsed, bytes);
+        } catch (err) {
+            document.getElementById('result').classList.add('hidden');
+            showError(err.message || String(err));
+        }
+    }
+
+    document.getElementById('parseBtn').addEventListener('click', runParse);
+    document.getElementById('exampleBtn').addEventListener('click', () => {
+        document.getElementById('hexInput').value = makeCFExample();
+        runParse();
+    });
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        document.getElementById('hexInput').value = '';
+        document.getElementById('result').classList.add('hidden');
+        document.getElementById('error').style.display = 'none';
+        window.lastParsedResult = null;
+    });
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+        if (!window.lastParsedResult) {
+            showError('请先解析一条报文。');
+            return;
+        }
+        const output = window.lastParsedResult.fields.map(field => ({
+            section: field.section,
+            field: field.name,
+            offset: field.start,
+            length: field.length,
+            raw: bytesToHex(field.raw),
+            value: field.value,
+            valid: field.valid
+        }));
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(output, null, 2));
+            const button = document.getElementById('copyBtn');
+            const oldText = button.textContent;
+            button.textContent = '已复制';
+            setTimeout(() => { button.textContent = oldText; }, 1200);
+        } catch (err) {
+            showError('浏览器未允许写入剪贴板。');
+        }
+    });
+</script>
+</body>
+</html>

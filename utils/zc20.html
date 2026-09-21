@@ -158,8 +158,10 @@
     <div id="output"></div>
 </div>
 
-<script>
+    <script>
     let extractedFrames = [];
+    const MAX_VISIBLE_FRAME_BUTTONS = 2000;
+    const FILE_CHUNK_SIZE = 1024 * 1024;
 
     function hexToBytes(hex) {
         const bytes = [];
@@ -169,9 +171,76 @@
         return bytes;
     }
 
+    function frameTimestamp(line) {
+        const match = line.match(/^\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?)/);
+        return match ? match[1] : '';
+    }
+
+    function framesFromBytes(tokens, timestamp = '') {
+        const frames = [];
+        for (let i = 0; i + 3 < tokens.length; i++) {
+            if (tokens[i] !== 0xAA || tokens[i + 3] !== 0x20) continue;
+            const totalLength = ((tokens[i + 1] << 8) | tokens[i + 2]) + 3;
+            if (totalLength < 9 || i + totalLength > tokens.length) continue;
+            const frame = tokens.slice(i, i + totalLength);
+            if (frame[frame.length - 5] !== 0x55) continue;
+            frames.push({ bytes: frame, timestamp });
+            i += totalLength - 1;
+        }
+        return frames;
+    }
+
+    function createLogFrameParser() {
+        return { pending: null, frames: [] };
+    }
+
+    function consumeLogLine(line, parser) {
+        const marker = line.match(/(?:\[zc_msg\]\s*)?Recv:\[\s*(\d+)\s+Bytes\s+bin\]/i);
+        if (marker) {
+            parser.pending = {
+                expected: Number(marker[1]),
+                bytes: [],
+                timestamp: frameTimestamp(line)
+            };
+            appendLogBytes(line.slice(marker.index + marker[0].length), parser);
+            return;
+        }
+        // Long log lines may wrap without a timestamp; continue collecting their hex payload.
+        if (parser.pending && !/^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(line)) {
+            appendLogBytes(line, parser);
+        }
+    }
+
+    function appendLogBytes(text, parser) {
+        if (!parser.pending) return;
+        const remaining = parser.pending.expected - parser.pending.bytes.length;
+        const tokens = Array.from(text.matchAll(/(?:0x)?([0-9a-f]{2})(?![0-9a-f])/gi), match => parseInt(match[1], 16));
+        parser.pending.bytes.push(...tokens.slice(0, remaining));
+        if (parser.pending.bytes.length < parser.pending.expected) return;
+        const frame = parser.pending.bytes;
+        if (frame[3] === 0x20 && frame[frame.length - 5] === 0x55) {
+            parser.frames.push({ bytes: frame, timestamp: parser.pending.timestamp });
+        }
+        parser.pending = null;
+    }
+
+    function finishLogFrameParser(parser) {
+        if (parser.pending && parser.pending.bytes.length === parser.pending.expected) appendLogBytes('', parser);
+        return parser.frames;
+    }
+
     function extractZc20Frames(input) {
         const text = input.replace(/^\uFEFF/, '').trim();
         if (!text) throw new Error('请输入十六进制报文或日志内容。');
+
+        if (/Recv:\[\s*\d+\s+Bytes\s+bin\]/i.test(text)) {
+            const parser = createLogFrameParser();
+            const lines = text.split(/\r?\n/);
+            lines.forEach(line => consumeLogLine(line, parser));
+            const frames = finishLogFrameParser(parser);
+            if (!frames.length) throw new Error('未找到完整的 ZC 0x20 报文。');
+            return frames;
+        }
 
         const compact = text.replace(/0x/gi, '').replace(/[\s,;:_-]+/g, '');
         let tokens;
@@ -180,18 +249,40 @@
         } else {
             tokens = Array.from(text.matchAll(/(?<![0-9a-f])(?:0x)?([0-9a-f]{2})(?![0-9a-f])/gi), match => parseInt(match[1], 16));
         }
+        const frames = framesFromBytes(tokens);
 
-        const frames = [];
-        for (let i = 0; i + 3 < tokens.length; i++) {
-            if (tokens[i] !== 0xAA || tokens[i + 3] !== 0x20) continue;
-            const totalLength = ((tokens[i + 1] << 8) | tokens[i + 2]) + 3;
-            if (totalLength < 9 || i + totalLength > tokens.length) continue;
-            const frame = tokens.slice(i, i + totalLength);
-            if (frame[frame.length - 5] !== 0x55) continue;
-            frames.push(frame);
-            i += totalLength - 1;
+        if (!frames.length) throw new Error('未找到完整的 ZC 0x20 报文。');
+        return frames;
+    }
+
+    function readBlobChunk(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = event => resolve(event.target.result);
+            reader.onerror = () => reject(new Error('日志文件读取失败。'));
+            reader.readAsText(blob, 'UTF-8');
+        });
+    }
+
+    async function extractZc20FramesFromFile(file) {
+        const parser = createLogFrameParser();
+        let buffer = '';
+        let offset = 0;
+        let processed = 0;
+        while (offset < file.size) {
+            buffer += await readBlobChunk(file.slice(offset, offset + FILE_CHUNK_SIZE));
+            offset += FILE_CHUNK_SIZE;
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop() || '';
+            for (const line of lines) consumeLogLine(line, parser);
+            processed += lines.length;
+            if (offset < file.size) {
+                setInputStatus(`正在读取 ${file.name}：已处理 ${Math.min(offset, file.size).toLocaleString()} / ${file.size.toLocaleString()} 字节，已找到 ${parser.frames.length} 条报文。`);
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
-
+        if (buffer) consumeLogLine(buffer, parser);
+        const frames = finishLogFrameParser(parser);
         if (!frames.length) throw new Error('未找到完整的 ZC 0x20 报文。');
         return frames;
     }
@@ -209,7 +300,7 @@
             button.classList.toggle('active', buttonIndex === index);
         });
         try {
-            output.innerHTML = parseZcmMessage(extractedFrames[index], biIOMType === 'self');
+            output.innerHTML = parseZcmMessage(extractedFrames[index].bytes, biIOMType === 'self');
         } catch (error) {
             output.innerHTML = `<span class="error">解析错误：${error.message}</span>`;
         }
@@ -218,18 +309,20 @@
     function showFrames(frames, sourceName = '') {
         extractedFrames = frames;
         const frameList = document.getElementById('frameList');
-        frameList.innerHTML = frames.map((frame, index) =>
-            `<button type="button" class="frame-button" data-index="${index}">#${index + 1} · ${frame.length} B</button>`
+        const visibleFrames = frames.slice(0, MAX_VISIBLE_FRAME_BUTTONS);
+        frameList.innerHTML = visibleFrames.map((frame, index) =>
+            `<button type="button" class="frame-button" data-index="${index}">#${index + 1} · ${frame.timestamp || '无时刻'} · ${frame.bytes.length} B</button>`
         ).join('');
         frameList.querySelectorAll('.frame-button').forEach(button => {
             button.addEventListener('click', () => showFrame(Number(button.dataset.index)));
         });
         const source = sourceName ? `（${sourceName}）` : '';
-        setInputStatus(`提取成功${source}：找到 ${frames.length} 条完整的 0x20 报文。`, 'ok');
+        const limited = frames.length > MAX_VISIBLE_FRAME_BUTTONS ? `，列表显示前 ${MAX_VISIBLE_FRAME_BUTTONS} 条` : '';
+        setInputStatus(`提取成功${source}：找到 ${frames.length} 条完整的 0x20 报文${limited}。`, 'ok');
         showFrame(0);
     }
 
-    function parseMessage() {
+    async function parseMessage() {
         const input = document.getElementById('inputHex').value;
         const output = document.getElementById('output');
         try {
@@ -242,20 +335,15 @@
         }
     }
 
-    function readLogFile(file) {
+    async function readLogFile(file) {
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = event => {
-            document.getElementById('inputHex').value = event.target.result;
-            try {
-                showFrames(extractZc20Frames(event.target.result), file.name);
-            } catch (error) {
-                document.getElementById('output').innerHTML = `<span class="error">解析错误：${error.message}</span>`;
-                setInputStatus(`日志解析失败：${error.message}`, 'error');
-            }
-        };
-        reader.onerror = () => setInputStatus('日志文件读取失败。', 'error');
-        reader.readAsText(file, 'UTF-8');
+        try {
+            document.getElementById('inputHex').value = '';
+            showFrames(await extractZc20FramesFromFile(file), file.name);
+        } catch (error) {
+            document.getElementById('output').innerHTML = `<span class="error">解析错误：${error.message}</span>`;
+            setInputStatus(`日志解析失败：${error.message}`, 'error');
+        }
     }
 
     function clearInput() {
